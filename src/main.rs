@@ -105,6 +105,31 @@ fn build_ui(app: &adw::Application) {
     let threads = scanner.scan_folder(&demo_inbox);
     thread_view.set_threads(&threads);
 
+    let reading_view = Rc::new(ui::ReadingPaneView::new());
+
+    // Display the first thread on launch
+    if let Some(first) = threads.first() {
+        reading_view.display_thread(first);
+    }
+
+    // Connect dynamic selection: clicking or j/k immediately updates the reading view
+    let threads_store = thread_view.threads.clone();
+    let reading_update = reading_view.clone();
+    thread_view.list_box.connect_row_selected(move |_list_box, row_opt| {
+        if let Some(row) = row_opt {
+            let index = row.index() as usize;
+            let borrowed = threads_store.borrow();
+            if let Some(thread) = borrowed.get(index) {
+                reading_update.display_thread(thread);
+            }
+        }
+    });
+
+    // Select the first thread row in the list
+    if let Some(first_row) = thread_view.list_box.row_at_index(0) {
+        thread_view.list_box.select_row(Some(&first_row));
+    }
+
     let thread_page = adw::NavigationPage::builder()
         .title("Inbox")
         .tag("threads")
@@ -112,7 +137,6 @@ fn build_ui(app: &adw::Application) {
         .build();
     inner_split.set_sidebar(Some(&thread_page));
 
-    let reading_view = ui::ReadingPaneView::new();
     let reading_page = adw::NavigationPage::builder()
         .title("Message")
         .tag("message")

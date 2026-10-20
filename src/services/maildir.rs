@@ -240,6 +240,7 @@ fn group_into_threads(mut messages: Vec<Message>) -> Vec<Thread> {
             is_unread: has_unread,
             is_flagged: has_flagged,
             tags: Vec::new(),
+            messages: msgs,
         });
     }
 

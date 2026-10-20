@@ -58,6 +58,7 @@ pub struct Thread {
     pub is_unread: bool,
     pub is_flagged: bool,
     pub tags: Vec<String>,
+    pub messages: Vec<Message>,
 }
 
 /// A single email message.

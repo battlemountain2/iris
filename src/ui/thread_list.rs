@@ -11,6 +11,7 @@ pub struct ThreadListView {
     pub sidebar_toggle_btn: gtk::Button,
     pub compose_btn: gtk::Button,
     pub search_button: gtk::Button,
+    pub threads: std::cell::RefCell<Vec<Thread>>,
 }
 
 impl ThreadListView {
@@ -90,11 +91,14 @@ impl ThreadListView {
             sidebar_toggle_btn,
             compose_btn,
             search_button,
+            threads: std::cell::RefCell::new(Vec::new()),
         }
     }
 
     /// Populates the list box with real threads scanned from Maildir.
     pub fn set_threads(&self, threads: &[Thread]) {
+        *self.threads.borrow_mut() = threads.to_vec();
+
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
         }
