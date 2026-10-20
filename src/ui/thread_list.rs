@@ -3,9 +3,12 @@
 use adw::prelude::*;
 use gtk::glib;
 
+use crate::model::Thread;
+
 pub struct ThreadListView {
     pub container: gtk::Box,
     pub list_box: gtk::ListBox,
+    pub title: adw::WindowTitle,
 }
 
 impl ThreadListView {
@@ -19,7 +22,7 @@ impl ThreadListView {
 
         let title = adw::WindowTitle::builder()
             .title("Inbox")
-            .subtitle("14 unread")
+            .subtitle("Loading...")
             .build();
         header.set_title_widget(Some(&title));
 
@@ -67,54 +70,44 @@ impl ThreadListView {
             .build();
         list_box.add_css_class("boxed-list-separate");
 
-        populate_mock_threads(&list_box);
-
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
 
         Self {
             container,
             list_box,
+            title,
         }
     }
-}
 
-fn populate_mock_threads(list_box: &gtk::ListBox) {
-    list_box.append(&create_thread_card(
-        "Alex Rivera",
-        "Hermes v0.4.0 Release & Audio Overhaul",
-        "Hey Brayan, the Cairo vinyl disc hero and micro-segment visualizer look insane! Just pushed the branch...",
-        "10:42 AM",
-        true,
-        true,
-    ));
+    /// Populates the list box with real threads scanned from Maildir.
+    pub fn set_threads(&self, threads: &[Thread]) {
+        while let Some(child) = self.list_box.first_child() {
+            self.list_box.remove(&child);
+        }
 
-    list_box.append(&create_thread_card(
-        "GitHub Notifications",
-        "[battlemountain2/iris] New issue: Add JMAP support",
-        "Issue #1 created by contributor: Iris would benefit immensely from native Fastmail JMAP syncing...",
-        "9:15 AM",
-        true,
-        false,
-    ));
+        let unread_count = threads.iter().filter(|t| t.is_unread).count();
+        self.title.set_subtitle(&format!("{unread_count} unread"));
 
-    list_box.append(&create_thread_card(
-        "Apple Support",
-        "Your iCloud Storage Receipt",
-        "Your monthly receipt for 2TB iCloud+ storage is now available for download. Total: $9.99...",
-        "Yesterday",
-        false,
-        true,
-    ));
+        for thread in threads {
+            let sender = thread
+                .senders
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or("Unknown");
+            let date_str = thread.latest_timestamp.format("%b %d, %H:%M").to_string();
 
-    list_box.append(&create_thread_card(
-        "Hyprland Announcements",
-        "Hyprland 0.45 Released — Fractional Scaling & Dual-Kawase",
-        "Greetings Wayland users! The latest release brings rock-solid touch gestures and hardware cursor fixes...",
-        "Oct 18",
-        false,
-        false,
-    ));
+            let row = create_thread_card(
+                sender,
+                &thread.subject,
+                &thread.snippet,
+                &date_str,
+                thread.is_unread,
+                false,
+            );
+            self.list_box.append(&row);
+        }
+    }
 }
 
 fn create_thread_card(
@@ -158,10 +151,7 @@ fn create_thread_card(
         top_hbox.append(&attach_icon);
     }
 
-    let date_label = gtk::Label::builder()
-        .label(date)
-        .xalign(1.0)
-        .build();
+    let date_label = gtk::Label::builder().label(date).xalign(1.0).build();
     date_label.add_css_class("caption");
     date_label.add_css_class("dim-label");
     top_hbox.append(&date_label);

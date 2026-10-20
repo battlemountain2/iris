@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 mod model;
+mod services;
 mod ui;
 
+use std::path::PathBuf;
 use adw::prelude::*;
 use gtk::glib;
 
@@ -37,6 +39,16 @@ fn load_css() {
     }
 }
 
+fn get_mail_root() -> PathBuf {
+    if let Some(custom) = std::env::var_os("IRIS_MAIL_DIR") {
+        PathBuf::from(custom)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join("Mail")
+    } else {
+        PathBuf::from("/home/bry/Mail")
+    }
+}
+
 fn build_ui(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -46,6 +58,11 @@ fn build_ui(app: &adw::Application) {
         .build();
 
     window.add_css_class("iris-window");
+
+    // Initialize Maildir Scanner & Seed Demo Emails if directory is empty
+    let mail_root = get_mail_root();
+    let scanner = services::MaildirScanner::new(mail_root.clone());
+    let _ = scanner.ensure_demo_data();
 
     // Main 3-column responsive split view (Sidebar -> Threads -> Reading Pane)
     let outer_split = adw::NavigationSplitView::new();
@@ -66,6 +83,12 @@ fn build_ui(app: &adw::Application) {
     inner_split.set_max_sidebar_width(440.0);
 
     let thread_view = ui::ThreadListView::new();
+
+    // Scan threads from demo/INBOX
+    let demo_inbox = mail_root.join("demo").join("INBOX");
+    let threads = scanner.scan_folder(&demo_inbox);
+    thread_view.set_threads(&threads);
+
     let thread_page = adw::NavigationPage::builder()
         .title("Inbox")
         .tag("threads")
