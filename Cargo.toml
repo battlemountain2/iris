@@ -1,0 +1,28 @@
+[package]
+name = "iris"
+version = "0.1.0"
+edition = "2024"
+description = "An ultra-fast, liquid-glass email client for Arch Linux & Hyprland"
+authors = ["battlemountain2"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/battlemountain2/iris"
+keywords = ["email", "gtk4", "libadwaita", "linux", "wayland", "hyprland"]
+categories = ["email", "gui"]
+
+[dependencies]
+adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
+gtk = { package = "gtk4", version = "0.10.3", features = ["v4_12"] }
+gio = { version = "0.21.5", features = ["v2_72"] }
+glib = "0.21.5"
+cairo-rs = { version = "0.21.5", features = ["png"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.9"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.20"
+chrono = { version = "0.4", features = ["serde"] }
+mail-parser = "0.9"
+
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
