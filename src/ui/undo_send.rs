@@ -12,8 +12,11 @@ where
         recipient.to_string()
     };
 
+    // Note: Once the persistent outbox and SMTP service are wired, this will state
+    // "Sending to {target}... (Undo 10s)". While SMTP transport is under development,
+    // we honestly report that the draft was saved locally.
     let toast = adw::Toast::builder()
-        .title(format!("Message sent to {target}"))
+        .title(format!("Draft saved: {target} (SMTP queue pending)"))
         .button_label("Undo")
         .timeout(10)
         .priority(adw::ToastPriority::High)

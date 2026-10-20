@@ -54,9 +54,7 @@ impl MaildirScanner {
                 for entry in entries.flatten() {
                     let file_path = entry.path();
                     if file_path.is_file() {
-                        let path_str = file_path.to_string_lossy();
-                        let is_unread = *subdir == "new" || !path_str.contains(":2,") || !path_str.contains('S');
-                        let is_flagged = path_str.contains('F');
+                        let (is_unread, is_flagged) = parse_maildir_flags(&file_path);
 
                         if let Ok(bytes) = fs::read(&file_path) {
                             if let Some(msg) = parse_rfc822(&bytes, &file_path, is_unread, is_flagged) {
@@ -200,8 +198,8 @@ impl MaildirScanner {
                 for entry in entries.flatten() {
                     if let Ok(ft) = entry.file_type() {
                         if ft.is_file() {
-                            let name = entry.file_name().to_string_lossy().to_string();
-                            if *subdir == "new" || !name.contains(":2,") || !name.contains('S') {
+                            let (is_unread, _) = parse_maildir_flags(&entry.path());
+                            if is_unread {
                                 count += 1;
                             }
                         }
@@ -239,7 +237,43 @@ pub fn ensure_maildir_folder(folder_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Derives the account root directory dynamically from a message file path.
+/// Given e.g. `/home/user/Mail/work/INBOX/cur/123:2,S`, resolves `/home/user/Mail/work`.
+pub fn find_account_root_for_message(file_path: &Path) -> Option<PathBuf> {
+    let cur_or_new = file_path.parent()?;
+    let folder = cur_or_new.parent()?;
+    let account = folder.parent()?;
+    Some(account.to_path_buf())
+}
+
+/// Extracts the Maildir flags from a file path.
+/// Flags are only valid after `:2,` in the file's basename.
+/// Returns (is_unread, is_flagged).
+pub fn parse_maildir_flags(path: &Path) -> (bool, bool) {
+    let parent = path.parent();
+    let is_new_folder = parent
+        .and_then(|p| p.file_name())
+        .map(|name| name == "new")
+        .unwrap_or(false);
+
+    let file_name = match path.file_name().and_then(|n| n.to_str()) {
+        Some(name) => name,
+        None => return (is_new_folder, false),
+    };
+
+    if let Some((_base, flags_part)) = file_name.split_once(":2,") {
+        let is_seen = flags_part.contains('S');
+        let is_flagged = flags_part.contains('F');
+        let is_unread = is_new_folder || !is_seen;
+        (is_unread, is_flagged)
+    } else {
+        (is_new_folder, false)
+    }
+}
+
 /// Moves a message file to the target maildir folder (into its `cur` directory).
+/// If a file with the destination name already exists, generates a collision-safe
+/// unique filename preserving the Maildir flags so existing mail is never overwritten.
 /// Returns `(original_path, destination_path)` on success.
 pub fn move_message_to_folder(
     file_path: &Path,
@@ -257,11 +291,37 @@ pub fn move_message_to_folder(
 
     let file_name = file_path
         .file_name()
+        .and_then(|n| n.to_str())
         .ok_or_else(|| "Invalid file name".to_string())?;
 
-    let dest_path = cur_dir.join(file_name);
+    let mut dest_path = cur_dir.join(file_name);
     if file_path == dest_path {
         return Ok((file_path.to_path_buf(), dest_path));
+    }
+
+    // Collision Protection:
+    // If dest_path already exists and is a different file, generate a new unique Maildir filename
+    // preserving the Maildir flags after `:2,` so no message is destroyed.
+    if dest_path.exists() {
+        let flags = if let Some((_, f)) = file_name.split_once(":2,") {
+            format!(":2,{f}")
+        } else {
+            ":2,".to_string()
+        };
+        let now = Utc::now();
+        let timestamp = now.timestamp();
+        let micros = now.timestamp_subsec_micros();
+        let pid = std::process::id();
+        let mut counter = 0;
+        loop {
+            let unique_name = format!("{timestamp}.{micros}_{pid}_{counter}.iris{flags}");
+            let candidate = cur_dir.join(&unique_name);
+            if !candidate.exists() {
+                dest_path = candidate;
+                break;
+            }
+            counter += 1;
+        }
     }
 
     fs::rename(file_path, &dest_path).map_err(|e| {
@@ -275,18 +335,21 @@ pub fn move_message_to_folder(
     Ok((file_path.to_path_buf(), dest_path))
 }
 
-/// Moves all messages in a thread to the `Archive` folder of the account.
+/// Moves all messages in a thread to the `Archive` folder of their respective accounts.
+/// Dynamically resolves the source account per message; falls back to `default_account_root`.
 /// Returns a list of `(source_path, dest_path)` pairs that can be reverted by `restore_moved_files`.
 pub fn archive_thread(
     thread: &Thread,
-    account_root: &Path,
+    default_account_root: &Path,
 ) -> Result<Vec<(PathBuf, PathBuf)>, String> {
-    let archive_folder = account_root.join("Archive");
     let mut moves = Vec::new();
 
     for msg in &thread.messages {
         if let Some(ref path_str) = msg.file_path {
             let src = PathBuf::from(path_str);
+            let account_root = find_account_root_for_message(&src)
+                .unwrap_or_else(|| default_account_root.to_path_buf());
+            let archive_folder = account_root.join("Archive");
             match move_message_to_folder(&src, &archive_folder) {
                 Ok(moved) => moves.push(moved),
                 Err(err) => {
@@ -300,18 +363,21 @@ pub fn archive_thread(
     Ok(moves)
 }
 
-/// Moves all messages in a thread to the `Trash` folder of the account.
+/// Moves all messages in a thread to the `Trash` folder of their respective accounts.
+/// Dynamically resolves the source account per message; falls back to `default_account_root`.
 /// Returns a list of `(source_path, dest_path)` pairs that can be reverted by `restore_moved_files`.
 pub fn trash_thread(
     thread: &Thread,
-    account_root: &Path,
+    default_account_root: &Path,
 ) -> Result<Vec<(PathBuf, PathBuf)>, String> {
-    let trash_folder = account_root.join("Trash");
     let mut moves = Vec::new();
 
     for msg in &thread.messages {
         if let Some(ref path_str) = msg.file_path {
             let src = PathBuf::from(path_str);
+            let account_root = find_account_root_for_message(&src)
+                .unwrap_or_else(|| default_account_root.to_path_buf());
+            let trash_folder = account_root.join("Trash");
             match move_message_to_folder(&src, &trash_folder) {
                 Ok(moved) => moves.push(moved),
                 Err(err) => {
@@ -526,9 +592,18 @@ fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) ->
         .or_else(|| path.file_name().map(|n| n.to_string_lossy().to_string()))
         .unwrap_or_else(|| "unknown-id".to_string());
 
+    let in_reply_to = parsed.in_reply_to().as_text().map(String::from);
+    let references = parsed
+        .references()
+        .as_text_list()
+        .map(|list| list.into_iter().map(String::from).collect())
+        .unwrap_or_default();
+
     Some(Message {
         id: id.clone(),
         thread_id: id,
+        in_reply_to,
+        references,
         from,
         to,
         cc,
@@ -544,18 +619,130 @@ fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) ->
     })
 }
 
+struct DisjointSet {
+    parent: Vec<usize>,
+}
+
+impl DisjointSet {
+    fn new(size: usize) -> Self {
+        Self { parent: (0..size).collect() }
+    }
+    fn find(&mut self, i: usize) -> usize {
+        if self.parent[i] == i {
+            i
+        } else {
+            let p = self.parent[i];
+            self.parent[i] = self.find(p);
+            self.parent[i]
+        }
+    }
+    fn union(&mut self, i: usize, j: usize) {
+        let root_i = self.find(i);
+        let root_j = self.find(j);
+        if root_i != root_j {
+            self.parent[root_i] = root_j;
+        }
+    }
+}
+
+fn extract_email_address(raw: &str) -> String {
+    if let Some(start) = raw.find('<') {
+        if let Some(end) = raw[start..].find('>') {
+            return raw[start + 1..start + end].trim().to_lowercase();
+        }
+    }
+    raw.trim().to_lowercase()
+}
+
+fn message_all_addresses(msg: &Message) -> Vec<String> {
+    let mut addrs = Vec::new();
+    addrs.push(extract_email_address(&msg.from));
+    for to in &msg.to {
+        addrs.push(extract_email_address(to));
+    }
+    for cc in &msg.cc {
+        addrs.push(extract_email_address(cc));
+    }
+    addrs
+}
+
 fn group_into_threads(mut messages: Vec<Message>) -> Vec<Thread> {
+    if messages.is_empty() {
+        return Vec::new();
+    }
+
     messages.sort_by(|a, b| b.date.cmp(&a.date));
+    let n = messages.len();
+    let mut dsu = DisjointSet::new(n);
 
-    let mut thread_map: HashMap<String, Vec<Message>> = HashMap::new();
+    // Map Message-ID -> index
+    let mut id_to_index: HashMap<String, usize> = HashMap::new();
+    for (i, msg) in messages.iter().enumerate() {
+        if !msg.id.is_empty() {
+            id_to_index.insert(msg.id.clone(), i);
+        }
+    }
 
-    for msg in messages {
-        let key = normalize_subject(&msg.subject);
-        thread_map.entry(key).or_default().push(msg);
+    // 1. Thread by explicit RFC 822 In-Reply-To and References headers
+    for (i, msg) in messages.iter().enumerate() {
+        if let Some(ref reply_to) = msg.in_reply_to {
+            let clean = reply_to.trim().trim_matches(['<', '>']);
+            for (known_id, &target_idx) in &id_to_index {
+                let clean_known = known_id.trim().trim_matches(['<', '>']);
+                if clean == clean_known {
+                    dsu.union(i, target_idx);
+                    break;
+                }
+            }
+        }
+        for ref_id in &msg.references {
+            let clean = ref_id.trim().trim_matches(['<', '>']);
+            for (known_id, &target_idx) in &id_to_index {
+                let clean_known = known_id.trim().trim_matches(['<', '>']);
+                if clean == clean_known {
+                    dsu.union(i, target_idx);
+                    break;
+                }
+            }
+        }
+    }
+
+    // 2. Thread by matching normalized subject + participant counterparty
+    // Messages without explicit header links only join if they share the exact
+    // normalized subject AND at least one email address counterparty.
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if dsu.find(i) == dsu.find(j) {
+                continue;
+            }
+            let sub_i = normalize_subject(&messages[i].subject);
+            let sub_j = normalize_subject(&messages[j].subject);
+            if !sub_i.is_empty() && sub_i == sub_j {
+                let from_i = extract_email_address(&messages[i].from);
+                let from_j = extract_email_address(&messages[j].from);
+                let participants_i = message_all_addresses(&messages[i]);
+                let participants_j = message_all_addresses(&messages[j]);
+
+                let shares_counterparty = from_i == from_j
+                    || participants_j.contains(&from_i)
+                    || participants_i.contains(&from_j);
+
+                if shares_counterparty {
+                    dsu.union(i, j);
+                }
+            }
+        }
+    }
+
+    // Collect into thread groups
+    let mut groups: HashMap<usize, Vec<Message>> = HashMap::new();
+    for (i, msg) in messages.into_iter().enumerate() {
+        let root = dsu.find(i);
+        groups.entry(root).or_default().push(msg);
     }
 
     let mut threads = Vec::new();
-    for (_subject_key, mut msgs) in thread_map {
+    for (_root, mut msgs) in groups {
         msgs.sort_by(|a, b| b.date.cmp(&a.date));
         let latest = &msgs[0];
         let has_unread = msgs.iter().any(|m| m.is_unread);
@@ -665,6 +852,8 @@ mod tests {
         let msg = Message {
             id: "msg-1".to_string(),
             thread_id: "thread-1".to_string(),
+            in_reply_to: None,
+            references: vec![],
             from: "test@iris.local".to_string(),
             to: vec!["me@iris.local".to_string()],
             cc: vec![],
@@ -713,5 +902,161 @@ mod tests {
         assert_eq!(update_maildir_flags("msg1:2,S", Some('F'), None), "msg1:2,FS");
         assert_eq!(update_maildir_flags("msg1:2,FS", None, Some('S')), "msg1:2,F");
         assert_eq!(update_maildir_flags("msg1:2,F", None, Some('F')), "msg1:2,");
+    }
+
+    #[test]
+    fn test_parse_maildir_flags_strict() {
+        // Cur without S is unread, with F is flagged (despite 'F' in FastmailAccount and 'S' in Server1)
+        let path_cur_unread_flagged = Path::new("/home/bry/Mail/FastmailAccount/INBOX/cur/1792464000.Server1.mail:2,F");
+        let (unread, flagged) = parse_maildir_flags(path_cur_unread_flagged);
+        assert!(unread, "Without S flag, message is unread");
+        assert!(flagged, "F flag after :2, makes it flagged");
+
+        // Cur with S is read, without F is not flagged
+        let path_cur_read_not_flagged = Path::new("/home/bry/Mail/FastmailAccount/INBOX/cur/1792464000.Server1.mail:2,S");
+        let (unread, flagged) = parse_maildir_flags(path_cur_read_not_flagged);
+        assert!(!unread);
+        assert!(!flagged);
+
+        // Cur with FS is read and flagged
+        let path_cur_read_flagged = Path::new("/home/bry/Mail/FastmailAccount/INBOX/cur/1792464000.Server1.mail:2,FS");
+        let (unread, flagged) = parse_maildir_flags(path_cur_read_flagged);
+        assert!(!unread);
+        assert!(flagged);
+
+        // New folder message is always unread
+        let path_new = Path::new("/home/bry/Mail/demo/INBOX/new/1792464000.mail:2,S");
+        let (unread, _) = parse_maildir_flags(path_new);
+        assert!(unread);
+    }
+
+    #[test]
+    fn test_collision_safe_move() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_collision_test_{}", std::process::id()));
+        let inbox_cur = temp_dir.join("INBOX").join("cur");
+        let archive_cur = temp_dir.join("Archive").join("cur");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&inbox_cur).unwrap();
+        fs::create_dir_all(&archive_cur).unwrap();
+
+        // Existing file in destination
+        let dest_existing = archive_cur.join("colliding.mail:2,S");
+        fs::write(&dest_existing, b"Existing message content in archive").unwrap();
+
+        // Source file with identical name
+        let src_file = inbox_cur.join("colliding.mail:2,S");
+        fs::write(&src_file, b"New message content moving from inbox").unwrap();
+
+        // Move to folder - must NOT overwrite
+        let (_orig, moved_dest) = move_message_to_folder(&src_file, &temp_dir.join("Archive")).unwrap();
+        assert!(moved_dest.exists());
+        assert_ne!(moved_dest, dest_existing, "Destination must be assigned a unique name on collision");
+
+        // Existing file must retain original content
+        let existing_content = fs::read(&dest_existing).unwrap();
+        assert_eq!(existing_content, b"Existing message content in archive");
+
+        // Moved file must retain its content
+        let moved_content = fs::read(&moved_dest).unwrap();
+        assert_eq!(moved_content, b"New message content moving from inbox");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_thread_grouping_unrelated_senders_remain_separate() {
+        let msg_apple = Message {
+            id: "msg-apple-1".to_string(),
+            thread_id: "msg-apple-1".to_string(),
+            in_reply_to: None,
+            references: vec![],
+            from: "Apple Support <support@apple.com>".to_string(),
+            to: vec!["brayan@omarchy.org".to_string()],
+            cc: vec![],
+            date: Utc::now(),
+            subject: "Your Monthly Receipt".to_string(),
+            body_plain: Some("iCloud $9.99".to_string()),
+            body_html: None,
+            has_remote_images: false,
+            attachments: vec![],
+            is_unread: true,
+            is_flagged: false,
+            file_path: None,
+        };
+
+        let msg_do = Message {
+            id: "msg-do-1".to_string(),
+            thread_id: "msg-do-1".to_string(),
+            in_reply_to: None,
+            references: vec![],
+            from: "DigitalOcean Billing <billing@digitalocean.com>".to_string(),
+            to: vec!["brayan@omarchy.org".to_string()],
+            cc: vec![],
+            date: Utc::now(),
+            subject: "Your Monthly Receipt".to_string(),
+            body_plain: Some("Droplet $12.00".to_string()),
+            body_html: None,
+            has_remote_images: false,
+            attachments: vec![],
+            is_unread: true,
+            is_flagged: false,
+            file_path: None,
+        };
+
+        // Group into threads
+        let threads = group_into_threads(vec![msg_apple, msg_do]);
+        assert_eq!(threads.len(), 2, "Unrelated senders with identical subjects must NOT merge into one conversation");
+    }
+
+    #[test]
+    fn test_select_second_conversation_archive_and_undo() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_select_test_{}", std::process::id()));
+        let account_root = temp_dir.join("demo");
+        let inbox_cur = account_root.join("INBOX").join("cur");
+        let archive_cur = account_root.join("Archive").join("cur");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&inbox_cur).unwrap();
+        fs::create_dir_all(&archive_cur).unwrap();
+
+        // Create 2 distinct conversations on disk
+        let file1 = inbox_cur.join("1001.first.mail:2,S");
+        let file2 = inbox_cur.join("1002.second.mail:2,S");
+        fs::write(&file1, b"From: Alice <alice@example.com>\r\nSubject: First Project\r\n\r\nHello Alice").unwrap();
+        fs::write(&file2, b"From: Bob <bob@example.com>\r\nSubject: Second Project\r\n\r\nHello Bob").unwrap();
+
+        let scanner = MaildirScanner::new(temp_dir.clone());
+        let mut threads = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(threads.len(), 2);
+
+        // Sort so we know which is second
+        threads.sort_by(|a, b| a.subject.cmp(&b.subject));
+        let first_thread = &threads[0];
+        let second_thread = &threads[1];
+        assert_eq!(first_thread.subject, "First Project");
+        assert_eq!(second_thread.subject, "Second Project");
+
+        // Target specifically the second conversation for archive
+        let moves = archive_thread(second_thread, &account_root).expect("archive success");
+        assert_eq!(moves.len(), 1);
+
+        // Verify: First conversation file in INBOX is COMPLETELY UNTOUCHED
+        assert!(file1.exists(), "First conversation must remain in INBOX");
+        let first_content = fs::read(&file1).unwrap();
+        assert!(first_content.starts_with(b"From: Alice"));
+
+        // Verify: Second conversation moved to Archive
+        assert!(!file2.exists(), "Second conversation file must have moved out of INBOX");
+        let archived_file = &moves[0].1;
+        assert!(archived_file.exists());
+        let archived_content = fs::read(archived_file).unwrap();
+        assert!(archived_content.starts_with(b"From: Bob"));
+
+        // Verify: Undo restores ONLY the second conversation
+        restore_moved_files(&moves).expect("undo success");
+        assert!(file1.exists(), "First conversation still intact");
+        assert!(file2.exists(), "Second conversation restored to original path");
+        assert!(!archived_file.exists(), "Archive destination cleaned up");
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

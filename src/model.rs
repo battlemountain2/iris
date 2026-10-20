@@ -66,6 +66,8 @@ pub struct Thread {
 pub struct Message {
     pub id: String,
     pub thread_id: String,
+    pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
     pub from: String,
     pub to: Vec<String>,
     pub cc: Vec<String>,

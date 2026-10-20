@@ -14,9 +14,15 @@ pub fn render_body_markup(
     plain_text: Option<&str>,
     allow_remote_images: bool,
 ) -> String {
+    // Security limit: 2MB maximum processing size to prevent UI freeze
+    const MAX_PARSE_BYTES: usize = 2 * 1024 * 1024;
+
     if let Some(raw_html) = html {
         let trimmed = raw_html.trim();
         if !trimmed.is_empty() {
+            if trimmed.len() > MAX_PARSE_BYTES {
+                return format_plain_text_to_pango("⚠️ Message body exceeds maximum size for HTML parsing.\n\n");
+            }
             return convert_html_to_pango(trimmed, allow_remote_images);
         }
     }
@@ -34,6 +40,7 @@ pub fn convert_html_to_pango(html: &str, allow_remote_images: bool) -> String {
     let mut chars = html.chars().peekable();
     let mut in_pre = false;
     let mut in_quote = false;
+    let mut a_tag_stack: Vec<&'static str> = Vec::new();
 
     while let Some(c) = chars.next() {
         if c == '<' {
@@ -77,7 +84,7 @@ pub fn convert_html_to_pango(html: &str, allow_remote_images: bool) -> String {
                     if is_closing {
                         out.push_str("</i>");
                     } else {
-                        out.push_str("</i>");
+                        out.push_str("<i>");
                     }
                 }
                 "u" => {
@@ -123,14 +130,21 @@ pub fn convert_html_to_pango(html: &str, allow_remote_images: bool) -> String {
                 }
                 "a" => {
                     if is_closing {
-                        out.push_str("</a>");
+                        let closing = a_tag_stack.pop().unwrap_or("a");
+                        if closing == "a" {
+                            out.push_str("</a>");
+                        } else {
+                            out.push_str("</span>");
+                        }
                     } else {
                         let href = extract_attribute(tag_body, "href");
-                        if let Some(url) = href {
+                        if let Some(url) = href.and_then(|u| sanitize_url(&u)) {
                             let escaped_url = escape_xml(&url);
                             out.push_str(&format!("<a href=\"{escaped_url}\">"));
+                            a_tag_stack.push("a");
                         } else {
-                            out.push_str("<a>");
+                            out.push_str("<span>");
+                            a_tag_stack.push("span");
                         }
                     }
                 }
@@ -181,13 +195,15 @@ pub fn convert_html_to_pango(html: &str, allow_remote_images: bool) -> String {
                             out.push_str(
                                 " <span foreground=\"#8fa368\">[🖼️ Remote image hidden]</span> ",
                             );
-                        } else {
+                        } else if let Some(safe_src) = sanitize_url(&src) {
                             let label = alt_opt.unwrap_or_else(|| "Image".to_string());
-                            let escaped_src = escape_xml(&src);
+                            let escaped_src = escape_xml(&safe_src);
                             let escaped_label = escape_xml(&label);
                             out.push_str(&format!(
                                 " <a href=\"{escaped_src}\"><span foreground=\"#60a5fa\">[🖼️ {escaped_label}]</span></a> "
                             ));
+                        } else {
+                            out.push_str(" <span foreground=\"#64748b\">[🖼️ Unsafe Image]</span> ");
                         }
                     }
                 }
@@ -285,22 +301,88 @@ fn split_trailing_punctuation(word: &str) -> (&str, &str) {
     (&word[..end], &word[end..])
 }
 
-fn extract_attribute(tag_body: &str, attr_name: &str) -> Option<String> {
-    let needle = format!("{attr_name}=");
-    let pos = tag_body.to_lowercase().find(&needle)?;
-    let remainder = &tag_body[pos + needle.len()..].trim_start();
-
-    let quote_char = remainder.chars().next()?;
-    if quote_char == '"' || quote_char == '\'' {
-        let after_quote = &remainder[1..];
-        let end_pos = after_quote.find(quote_char)?;
-        Some(after_quote[..end_pos].to_string())
-    } else {
-        let end_pos = remainder
-            .find(|c: char| c.is_whitespace() || c == '>')
-            .unwrap_or(remainder.len());
-        Some(remainder[..end_pos].to_string())
+/// Validates that a URL uses safe, whitelisted schemes (http, https, mailto).
+/// Blocks dangerous protocols such as javascript:, file:, data:, or control characters.
+pub fn sanitize_url(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() || trimmed.chars().any(|c| c.is_control()) {
+        return None;
     }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:") {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
+}
+
+/// Safely extracts an attribute from an HTML tag body using character iteration.
+/// Never panics on multi-byte UTF-8 boundaries or malformed tag attributes.
+fn extract_attribute(tag_body: &str, attr_name: &str) -> Option<String> {
+    let attr_lower = attr_name.to_ascii_lowercase();
+    let chars: Vec<char> = tag_body.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        // Skip whitespace
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        if i >= chars.len() {
+            break;
+        }
+
+        // Read attribute key
+        let key_start = i;
+        while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '=' && chars[i] != '>' && chars[i] != '/' {
+            i += 1;
+        }
+        let key: String = chars[key_start..i].iter().collect();
+
+        // Skip whitespace before '='
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+
+        if i < chars.len() && chars[i] == '=' {
+            i += 1; // skip '='
+
+            // Skip whitespace after '='
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            if i >= chars.len() {
+                break;
+            }
+
+            let quote = chars[i];
+            let val = if quote == '"' || quote == '\'' {
+                i += 1; // skip opening quote
+                let val_start = i;
+                while i < chars.len() && chars[i] != quote {
+                    i += 1;
+                }
+                let s: String = chars[val_start..i].iter().collect();
+                if i < chars.len() && chars[i] == quote {
+                    i += 1; // skip closing quote
+                }
+                s
+            } else {
+                let val_start = i;
+                while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '>' {
+                    i += 1;
+                }
+                chars[val_start..i].iter().collect()
+            };
+
+            if key.to_ascii_lowercase() == attr_lower {
+                return Some(val);
+            }
+        }
+    }
+
+    None
 }
 
 fn escape_xml(raw: &str) -> String {
@@ -382,5 +464,30 @@ mod tests {
         let markup = format_plain_text_to_pango(plain);
         assert!(markup.contains("▎"));
         assert!(markup.contains("<a href=\"https://omarchy.org\">https://omarchy.org</a>"));
+    }
+
+    #[test]
+    fn test_html_italics_tag_and_emphasis() {
+        let html = "<p><i>Italic text</i> and <em>emphasized text</em></p>";
+        let markup = convert_html_to_pango(html, false);
+        assert!(markup.contains("<i>Italic text</i>"), "Actual: {markup}");
+        assert!(markup.contains("<i>emphasized text</i>"), "Actual: {markup}");
+    }
+
+    #[test]
+    fn test_unicode_attribute_no_panic() {
+        let html = "<a href=\"https://example.com/тест\" title=\"üñîçødé\" data-info=\"🎉\">Link</a>";
+        let markup = convert_html_to_pango(html, false);
+        assert!(markup.contains("<a href=\"https://example.com/тест\">Link</a>"));
+    }
+
+    #[test]
+    fn test_unsafe_url_schemes_blocked() {
+        let dangerous_html = "<a href=\"javascript:alert(1)\">Attack 1</a> and <a href=\"file:///etc/passwd\">Attack 2</a>";
+        let markup = convert_html_to_pango(dangerous_html, false);
+        assert!(!markup.contains("href=\"javascript:"));
+        assert!(!markup.contains("href=\"file:"));
+        assert!(markup.contains("<span>Attack 1</span>"));
+        assert!(markup.contains("<span>Attack 2</span>"));
     }
 }

@@ -10,6 +10,8 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::glib;
 
+use crate::model::Thread;
+
 const APPLICATION_ID: &str = "io.github.battlemountain2.Iris";
 
 fn main() -> glib::ExitCode {
@@ -71,9 +73,21 @@ fn build_ui(app: &adw::Application) {
     let scanner = Rc::new(services::MaildirScanner::new(mail_root.clone()));
     let _ = scanner.ensure_demo_data();
 
+    // Authoritative Application State
+    struct AppState {
+        mail_root: PathBuf,
+        current_folder: RefCell<PathBuf>,
+        current_title: RefCell<String>,
+        selected_thread: RefCell<Option<Thread>>,
+    }
+
     let demo_account = mail_root.join("demo");
-    let current_folder = Rc::new(RefCell::new(demo_account.join("INBOX")));
-    let current_title = Rc::new(RefCell::new("Inbox".to_string()));
+    let app_state = Rc::new(AppState {
+        mail_root: mail_root.clone(),
+        current_folder: RefCell::new(demo_account.join("INBOX")),
+        current_title: RefCell::new("Inbox".to_string()),
+        selected_thread: RefCell::new(None),
+    });
 
     // Toast Overlay for 10-Second Undo Actions & Undo Send
     let toast_overlay = adw::ToastOverlay::new();
@@ -107,18 +121,23 @@ fn build_ui(app: &adw::Application) {
 
     let reading_view = Rc::new(ui::ReadingPaneView::new());
 
-    // Connect dynamic selection: clicking or j/k immediately updates the reading view
-    let threads_store = thread_view.threads.clone();
-    let reading_update = reading_view.clone();
-    thread_view.list_box.connect_row_selected(move |_list_box, row_opt| {
-        if let Some(row) = row_opt {
-            let index = row.index() as usize;
-            let borrowed = threads_store.borrow();
-            if let Some(thread) = borrowed.get(index) {
-                reading_update.display_thread(thread);
+    // Dynamic selection: clicking or j/k immediately updates authoritative state and reading view
+    {
+        let tv = thread_view.clone();
+        let rv = reading_view.clone();
+        let state = app_state.clone();
+        thread_view.list_box.connect_row_selected(move |_list_box, row_opt| {
+            if let Some(row) = row_opt {
+                let index = row.index() as usize;
+                if let Some(thread) = tv.get_thread_at_index(index) {
+                    *state.selected_thread.borrow_mut() = Some(thread.clone());
+                    rv.display_thread(&thread);
+                }
+            } else {
+                *state.selected_thread.borrow_mut() = None;
             }
-        }
-    });
+        });
+    }
 
     let thread_page = adw::NavigationPage::builder()
         .title("Inbox")
@@ -164,49 +183,67 @@ fn build_ui(app: &adw::Application) {
     // Reactive Refresh Helper: Rescans active folder, updates thread list & live counters
     let refresh_view: Rc<dyn Fn()> = {
         let scanner = scanner.clone();
-        let current_folder = current_folder.clone();
-        let current_title = current_title.clone();
+        let state = app_state.clone();
         let thread_view = thread_view.clone();
         let reading_view = reading_view.clone();
         let sidebar_view = sidebar_view.clone();
-        let demo_account = demo_account.clone();
 
         Rc::new(move || {
-            let folder = current_folder.borrow().clone();
-            let title = current_title.borrow().clone();
+            let folder = state.current_folder.borrow().clone();
+            let title = state.current_title.borrow().clone();
             thread_view.title.set_title(&title);
+
+            let prev_index = thread_view.list_box.selected_row().map(|r| r.index() as usize).unwrap_or(0);
+            let prev_id = state.selected_thread.borrow().as_ref().map(|t| t.id.clone());
 
             let threads = scanner.scan_folder(&folder);
             thread_view.set_threads(&threads);
 
-            if let Some(first) = threads.first() {
-                reading_view.display_thread(first);
-                if let Some(first_row) = thread_view.list_box.row_at_index(0) {
-                    thread_view.list_box.select_row(Some(&first_row));
-                }
-            } else {
+            let visible = thread_view.get_visible_threads();
+            if visible.is_empty() {
                 reading_view.clear();
+                *state.selected_thread.borrow_mut() = None;
+            } else {
+                // If previously selected thread is still present in folder, keep it selected.
+                // If it was removed (e.g. archived or deleted), select neighbor at prev_index.
+                let target_index = if let Some(ref pid) = prev_id {
+                    visible.iter().position(|t| &t.id == pid).unwrap_or_else(|| {
+                        prev_index.min(visible.len() - 1)
+                    })
+                } else {
+                    prev_index.min(visible.len() - 1)
+                };
+
+                thread_view.select_index(target_index);
+                if let Some(target_thread) = visible.get(target_index) {
+                    *state.selected_thread.borrow_mut() = Some(target_thread.clone());
+                    reading_view.display_thread(target_thread);
+                }
             }
 
-            // Live Mailbox Counter updates
-            let inbox_unread = scanner.count_unread_in_folder(&demo_account.join("INBOX"));
-            let archive_count = scanner.count_total_in_folder(&demo_account.join("Archive"));
-            let trash_count = scanner.count_total_in_folder(&demo_account.join("Trash"));
-            let sent_count = scanner.count_total_in_folder(&demo_account.join("Sent"));
+            // Live Mailbox Counter updates across configured accounts
+            for acct_id in &["demo", "work", "icloud"] {
+                let acct_dir = state.mail_root.join(acct_id);
+                let unread = scanner.count_unread_in_folder(&acct_dir.join("INBOX"));
+                sidebar_view.update_badge(&format!("account:{acct_id}"), unread);
 
-            sidebar_view.update_badge("inbox", inbox_unread);
-            sidebar_view.update_badge("account:demo", inbox_unread);
-            sidebar_view.update_badge("folder:archive", archive_count);
-            sidebar_view.update_badge("folder:trash", trash_count);
-            sidebar_view.update_badge("folder:sent", sent_count);
+                if *acct_id == "demo" {
+                    sidebar_view.update_badge("inbox", unread);
+                    let archive_count = scanner.count_total_in_folder(&acct_dir.join("Archive"));
+                    let trash_count = scanner.count_total_in_folder(&acct_dir.join("Trash"));
+                    let sent_count = scanner.count_total_in_folder(&acct_dir.join("Sent"));
+                    sidebar_view.update_badge("folder:archive", archive_count);
+                    sidebar_view.update_badge("folder:trash", trash_count);
+                    sidebar_view.update_badge("folder:sent", sent_count);
+                }
+            }
         })
     };
 
     // Sidebar Mailbox / Folder Switching
     {
         let sidebar_view_ref = sidebar_view.clone();
-        let current_folder = current_folder.clone();
-        let current_title = current_title.clone();
+        let state = app_state.clone();
         let refresh_view = refresh_view.clone();
         let demo_account = demo_account.clone();
         let mail_root = mail_root.clone();
@@ -217,40 +254,40 @@ fn build_ui(app: &adw::Application) {
 
             match id.as_str() {
                 "inbox" | "account:demo" => {
-                    *current_folder.borrow_mut() = demo_account.join("INBOX");
-                    *current_title.borrow_mut() = "Inbox".to_string();
+                    *state.current_folder.borrow_mut() = demo_account.join("INBOX");
+                    *state.current_title.borrow_mut() = "Inbox".to_string();
                 }
                 "account:work" => {
                     let work_inbox = mail_root.join("work").join("INBOX");
                     let _ = services::maildir::ensure_maildir_folder(&work_inbox);
-                    *current_folder.borrow_mut() = work_inbox;
-                    *current_title.borrow_mut() = "Gmail (Work)".to_string();
+                    *state.current_folder.borrow_mut() = work_inbox;
+                    *state.current_title.borrow_mut() = "Gmail (Work)".to_string();
                 }
                 "account:icloud" => {
                     let icloud_inbox = mail_root.join("icloud").join("INBOX");
                     let _ = services::maildir::ensure_maildir_folder(&icloud_inbox);
-                    *current_folder.borrow_mut() = icloud_inbox;
-                    *current_title.borrow_mut() = "iCloud".to_string();
+                    *state.current_folder.borrow_mut() = icloud_inbox;
+                    *state.current_title.borrow_mut() = "iCloud".to_string();
                 }
                 "folder:sent" => {
-                    *current_folder.borrow_mut() = demo_account.join("Sent");
-                    *current_title.borrow_mut() = "Sent".to_string();
+                    *state.current_folder.borrow_mut() = demo_account.join("Sent");
+                    *state.current_title.borrow_mut() = "Sent".to_string();
                 }
                 "folder:archive" => {
-                    *current_folder.borrow_mut() = demo_account.join("Archive");
-                    *current_title.borrow_mut() = "Archive".to_string();
+                    *state.current_folder.borrow_mut() = demo_account.join("Archive");
+                    *state.current_title.borrow_mut() = "Archive".to_string();
                 }
                 "folder:trash" => {
-                    *current_folder.borrow_mut() = demo_account.join("Trash");
-                    *current_title.borrow_mut() = "Trash".to_string();
+                    *state.current_folder.borrow_mut() = demo_account.join("Trash");
+                    *state.current_title.borrow_mut() = "Trash".to_string();
                 }
                 "view:feed" => {
-                    *current_folder.borrow_mut() = demo_account.join("INBOX");
-                    *current_title.borrow_mut() = "Feed & Newsletters".to_string();
+                    *state.current_folder.borrow_mut() = demo_account.join("INBOX");
+                    *state.current_title.borrow_mut() = "Feed & Newsletters".to_string();
                 }
                 "view:flagged" => {
-                    *current_folder.borrow_mut() = demo_account.join("INBOX");
-                    *current_title.borrow_mut() = "Flagged".to_string();
+                    *state.current_folder.borrow_mut() = demo_account.join("INBOX");
+                    *state.current_title.borrow_mut() = "Flagged".to_string();
                 }
                 _ => {}
             }
@@ -263,7 +300,7 @@ fn build_ui(app: &adw::Application) {
     let compose_dialog = Rc::new(ui::ComposeDialog::new(move |to, _subject, _body| {
         let to_for_undo = to.clone();
         ui::show_undo_toast(&toast_overlay_ref, &to, move || {
-            tracing::info!("Undoing send for message to {to_for_undo}");
+            tracing::info!("Undoing draft for message to {to_for_undo}");
         });
     }));
 
@@ -275,16 +312,17 @@ fn build_ui(app: &adw::Application) {
 
     // Action Handlers: Archive, Trash, Reply, Star with Undo Toasts
     let do_archive = {
-        let reading_view = reading_view.clone();
-        let demo_account = demo_account.clone();
+        let state = app_state.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
 
         Rc::new(move || {
-            let thread_opt = reading_view.current_thread.borrow().clone();
+            let thread_opt = state.selected_thread.borrow().clone();
             if let Some(thread) = thread_opt {
                 let subject = thread.subject.clone();
-                match services::maildir::archive_thread(&thread, &demo_account) {
+                let folder = state.current_folder.borrow().clone();
+                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+                match services::maildir::archive_thread(&thread, &account_fallback) {
                     Ok(moves) => {
                         tracing::info!("Archived thread: '{}' ({} files moved)", subject, moves.len());
                         refresh_view();
@@ -311,16 +349,17 @@ fn build_ui(app: &adw::Application) {
     };
 
     let do_trash = {
-        let reading_view = reading_view.clone();
-        let demo_account = demo_account.clone();
+        let state = app_state.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
 
         Rc::new(move || {
-            let thread_opt = reading_view.current_thread.borrow().clone();
+            let thread_opt = state.selected_thread.borrow().clone();
             if let Some(thread) = thread_opt {
                 let subject = thread.subject.clone();
-                match services::maildir::trash_thread(&thread, &demo_account) {
+                let folder = state.current_folder.borrow().clone();
+                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+                match services::maildir::trash_thread(&thread, &account_fallback) {
                     Ok(moves) => {
                         tracing::info!("Moved thread to trash: '{}' ({} files moved)", subject, moves.len());
                         refresh_view();
@@ -347,12 +386,12 @@ fn build_ui(app: &adw::Application) {
     };
 
     let do_reply = {
-        let reading_view = reading_view.clone();
+        let state = app_state.clone();
         let compose_dialog = compose_dialog.clone();
         let win = window.clone();
 
         Rc::new(move || {
-            let thread_opt = reading_view.current_thread.borrow().clone();
+            let thread_opt = state.selected_thread.borrow().clone();
             if let Some(thread) = thread_opt {
                 let to = thread.senders.first().cloned().unwrap_or_default();
                 let body = thread.messages.first().and_then(|m| m.body_plain.clone()).unwrap_or_default();
@@ -364,10 +403,10 @@ fn build_ui(app: &adw::Application) {
     };
 
     let do_star = {
-        let reading_view = reading_view.clone();
+        let state = app_state.clone();
         let refresh_view = refresh_view.clone();
         Rc::new(move || {
-            let thread_opt = reading_view.current_thread.borrow().clone();
+            let thread_opt = state.selected_thread.borrow().clone();
             if let Some(thread) = thread_opt {
                 if let Ok(new_flag) = services::maildir::toggle_thread_flag(&thread) {
                     tracing::info!("Thread flag toggled: is_flagged={new_flag}");
@@ -378,10 +417,10 @@ fn build_ui(app: &adw::Application) {
     };
 
     let do_toggle_read = {
-        let reading_view = reading_view.clone();
+        let state = app_state.clone();
         let refresh_view = refresh_view.clone();
         Rc::new(move || {
-            let thread_opt = reading_view.current_thread.borrow().clone();
+            let thread_opt = state.selected_thread.borrow().clone();
             if let Some(thread) = thread_opt {
                 if let Ok(new_unread) = services::maildir::toggle_thread_read(&thread) {
                     tracing::info!("Thread unread toggled: is_unread={new_unread}");
@@ -424,22 +463,26 @@ fn build_ui(app: &adw::Application) {
         });
     }
 
-    // Connect Privacy Banner Action Buttons
+    // Connect Privacy Banner Action Buttons (with clean borrow guards)
     {
         let rv = reading_view.clone();
+        let state = app_state.clone();
         reading_view.load_images_btn.connect_clicked(move |_| {
             rv.allow_remote_images.set(true);
-            if let Some(thread) = rv.current_thread.borrow().as_ref() {
-                rv.display_thread(thread);
+            let thread_opt = state.selected_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                rv.display_thread(&thread);
             }
         });
     }
     {
         let rv = reading_view.clone();
+        let state = app_state.clone();
         reading_view.always_load_btn.connect_clicked(move |_| {
             rv.allow_remote_images.set(true);
-            if let Some(thread) = rv.current_thread.borrow().as_ref() {
-                rv.display_thread(thread);
+            let thread_opt = state.selected_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                rv.display_thread(&thread);
             }
         });
     }

@@ -15,7 +15,6 @@ pub struct ThreadListView {
     pub palette_btn: gtk::Button,
     pub all_threads: RefCell<Vec<Thread>>,
     pub visible_threads: RefCell<Vec<Thread>>,
-    pub threads: RefCell<Vec<Thread>>, // alias for visible threads
 }
 
 impl ThreadListView {
@@ -90,7 +89,6 @@ impl ThreadListView {
 
         let all_threads = RefCell::new(Vec::new());
         let visible_threads = RefCell::new(Vec::new());
-        let threads = RefCell::new(Vec::new());
 
         Self {
             container,
@@ -102,7 +100,31 @@ impl ThreadListView {
             palette_btn,
             all_threads,
             visible_threads,
-            threads,
+        }
+    }
+
+    /// Returns the thread at the specified visible index.
+    pub fn get_thread_at_index(&self, index: usize) -> Option<Thread> {
+        self.visible_threads.borrow().get(index).cloned()
+    }
+
+    /// Returns the currently selected thread in the list box.
+    #[allow(dead_code)]
+    pub fn get_selected_thread(&self) -> Option<Thread> {
+        let row = self.list_box.selected_row()?;
+        self.get_thread_at_index(row.index() as usize)
+    }
+
+    /// Returns a snapshot of all currently visible threads.
+    pub fn get_visible_threads(&self) -> Vec<Thread> {
+        self.visible_threads.borrow().clone()
+    }
+
+    /// Selects the row at the given index and gives it focus.
+    pub fn select_index(&self, index: usize) {
+        if let Some(row) = self.list_box.row_at_index(index as i32) {
+            self.list_box.select_row(Some(&row));
+            row.grab_focus();
         }
     }
 
@@ -130,7 +152,6 @@ impl ThreadListView {
                 .collect()
         };
 
-        *self.threads.borrow_mut() = filtered.clone();
         *self.visible_threads.borrow_mut() = filtered.clone();
 
         while let Some(child) = self.list_box.first_child() {
