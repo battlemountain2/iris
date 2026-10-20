@@ -15,7 +15,7 @@ navigation-split-view > navigation-page > .view {
 
 /* Translucency RESTRAINED TO SIDEBAR (macOS / iOS Mail liquid glass) */
 .iris-sidebar {
-  background-color: alpha(#0a0c10, 0.42); /* Frosted liquid glass ground */
+  background-color: alpha(#0a0c12, 0.28); /* Lower alpha = more wallpaper blur visible */
   border-right: 1px solid alpha(#ffffff, 0.08);
 }
 
