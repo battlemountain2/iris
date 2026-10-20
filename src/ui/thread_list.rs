@@ -207,6 +207,7 @@ impl ThreadListView {
                 .map(|s| s.as_str())
                 .unwrap_or("Unknown");
             let date_str = thread.latest_timestamp.format("%b %d, %H:%M").to_string();
+            let has_attachment = thread.messages.iter().any(|m| !m.attachments.is_empty());
 
             let row = create_thread_card(
                 sender,
@@ -215,7 +216,7 @@ impl ThreadListView {
                 &date_str,
                 thread.is_unread,
                 thread.is_flagged,
-                false,
+                has_attachment,
             );
             self.list_box.append(&row);
         }
@@ -233,51 +234,62 @@ fn create_thread_card(
 ) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.add_css_class("iris-thread-card");
+    row.add_css_class("iris-message-row");
 
-    let card_vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    let card_vbox = gtk::Box::new(gtk::Orientation::Vertical, 3);
 
-    // Top line: Unread dot + Sender + Attachment + Flag + Date
+    // Top line: Unread dot / placeholder + Sender + Icons + Date
     let top_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
 
+    let unread_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     if is_unread {
-        let unread_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        unread_dot.add_css_class("iris-unread-badge");
-        unread_dot.set_valign(gtk::Align::Center);
-        top_hbox.append(&unread_dot);
+        unread_dot.add_css_class("iris-unread-dot");
+    } else {
+        unread_dot.add_css_class("iris-unread-placeholder");
     }
+    unread_dot.set_valign(gtk::Align::Center);
+    top_hbox.append(&unread_dot);
 
     let sender_label = gtk::Label::builder()
         .label(sender)
         .xalign(0.0)
         .hexpand(true)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     if is_unread {
         sender_label.add_css_class("heading");
+        sender_label.add_css_class("iris-sender-unread");
     } else {
         sender_label.add_css_class("body");
+        sender_label.add_css_class("iris-sender-read");
     }
     top_hbox.append(&sender_label);
-
-    if is_flagged {
-        let star_icon = gtk::Image::from_icon_name("starred-symbolic");
-        star_icon.add_css_class("iris-star-badge");
-        top_hbox.append(&star_icon);
-    }
 
     if has_attachment {
         let attach_icon = gtk::Image::from_icon_name("mail-attachment-symbolic");
         attach_icon.add_css_class("dim-label");
+        attach_icon.set_icon_size(gtk::IconSize::Inherit);
         top_hbox.append(&attach_icon);
     }
 
-    let date_label = gtk::Label::builder().label(date).xalign(1.0).build();
+    if is_flagged {
+        let star_icon = gtk::Image::from_icon_name("starred-symbolic");
+        star_icon.add_css_class("iris-star-badge");
+        star_icon.set_icon_size(gtk::IconSize::Inherit);
+        top_hbox.append(&star_icon);
+    }
+
+    let date_label = gtk::Label::builder()
+        .label(date)
+        .xalign(1.0)
+        .build();
     date_label.add_css_class("caption");
     date_label.add_css_class("dim-label");
     top_hbox.append(&date_label);
 
     card_vbox.append(&top_hbox);
 
-    // Subject line
+    // Subject line (crisp medium text)
     let subject_label = gtk::Label::builder()
         .label(subject)
         .xalign(0.0)
@@ -287,15 +299,16 @@ fn create_thread_card(
         subject_label.add_css_class("body");
         subject_label.add_css_class("iris-subject-unread");
     } else {
+        subject_label.add_css_class("body");
         subject_label.add_css_class("dim-label");
     }
     card_vbox.append(&subject_label);
 
-    // Snippet preview line
+    // Preview snippet (subdued secondary text)
     let snippet_label = gtk::Label::builder()
         .label(snippet)
         .xalign(0.0)
-        .lines(2)
+        .lines(1)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     snippet_label.add_css_class("caption");

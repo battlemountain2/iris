@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Iris Liquid-Glass & iOS Mail Theme Style */
+/* Iris Liquid-Glass & Mimestream-Hierarchy Theme Stylesheet */
 
-/* Root Window, Containers, and Internal Split Panes: Pure Transparent */
+/* Root Window, Containers, and Internal Split Panes: Transparent for Wayland Compositor Blur */
 window.iris-window,
 window.iris-window.background,
 window.iris-window > contents,
@@ -16,21 +16,23 @@ navigation-split-view > navigation-page > .view,
 .sidebar-pane {
   background-color: transparent;
   background-image: none;
-  color: #f1f5f9;
+  color: @theme_text;
 }
 
-/* Translucency RESTRAINED TO SIDEBAR (macOS / iOS Mail liquid glass) */
+/* ========================================================================= */
+/* 1. FROSTED GLASS SIDEBAR (Liquid Glass Restrained to Navigation Sidebar)  */
+/* ========================================================================= */
 .iris-sidebar {
-  background-color: alpha(#1c2230, 0.36);
+  background-color: alpha(@theme_bg, 0.38);
   background-image: linear-gradient(170deg, alpha(#ffffff, 0.08) 0%, alpha(#ffffff, 0.02) 25%, alpha(#000000, 0.04) 100%);
-  border-right: 1px solid alpha(#ffffff, 0.12);
-  box-shadow: inset -1px 0 0 alpha(#ffffff, 0.06), inset 0 1px 0 alpha(#ffffff, 0.08);
+  border-right: 1px solid alpha(#ffffff, 0.10);
+  box-shadow: inset -1px 0 0 alpha(#ffffff, 0.05);
 }
 
 .iris-sidebar headerbar {
   background-color: transparent;
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.05) 0%, transparent 100%);
-  border-bottom: 1px solid alpha(#ffffff, 0.07);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.04) 0%, transparent 100%);
+  border-bottom: 1px solid alpha(#ffffff, 0.06);
 }
 
 .iris-sidebar scrolledwindow,
@@ -44,140 +46,172 @@ navigation-split-view > navigation-page > .view,
 
 .iris-sidebar row {
   background-color: transparent;
-  border-radius: 9px;
-  margin: 2px 10px;
-  padding: 1px 2px;
+  border-radius: 8px;
+  margin: 2px 8px;
+  padding: 3px 6px;
   transition: background-color 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
   border: 1px solid transparent;
 }
 
 .iris-sidebar row:hover {
-  background-color: alpha(#ffffff, 0.07);
-  box-shadow: inset 0 1px 0 alpha(#ffffff, 0.10);
+  background-color: alpha(#ffffff, 0.06);
 }
 
 .iris-sidebar row:selected {
-  background: linear-gradient(135deg, alpha(#8fa368, 0.42) 0%, alpha(#768953, 0.30) 100%);
-  border: 1px solid alpha(#8fa368, 0.65);
-  box-shadow: inset 0 1px 0 alpha(#ffffff, 0.22), 0 2px 8px alpha(#000000, 0.30);
+  background-color: alpha(@theme_accent, 0.28);
+  border: 1px solid alpha(@theme_accent, 0.55);
   color: #ffffff;
 }
 
-/* Badge pills on frosted glass */
+.iris-sidebar row:focus-visible {
+  outline: 2px solid alpha(@theme_accent, 0.70);
+  outline-offset: -1px;
+}
+
+/* Sidebar Count Badges */
 .iris-sidebar .badge {
-  background-color: alpha(#8fa368, 0.25);
-  border: 1px solid alpha(#8fa368, 0.45);
-  color: #e2e8f0;
+  background-color: alpha(@theme_accent, 0.22);
+  border: 1px solid alpha(@theme_accent, 0.40);
+  color: @theme_text;
   border-radius: 12px;
   padding: 1px 7px;
   font-size: 11px;
   font-weight: 600;
 }
 
-/* Thread List: Elevated solid dark canvas */
+/* ========================================================================= */
+/* 2. THREAD LIST PANE (Mimestream-Style Compact Hierarchy)                  */
+/* ========================================================================= */
 .iris-thread-pane,
 navigation-split-view > widget.content-pane .iris-thread-pane {
-  background-color: #171a23;
-  border-right: 1px solid alpha(#ffffff, 0.06);
-  box-shadow: -6px 0 20px alpha(#000000, 0.45);
+  background-color: @theme_surface;
+  border-right: 1px solid alpha(@theme_text, 0.07);
 }
 
 .iris-thread-pane headerbar,
 .iris-thread-pane scrolledwindow,
 .iris-thread-pane list {
-  background-color: #171a23;
+  background-color: @theme_surface;
 }
 
 .iris-thread-pane headerbar {
-  border-bottom: 1px solid alpha(#ffffff, 0.05);
+  border-bottom: 1px solid alpha(@theme_text, 0.06);
 }
 
-/* Reading Pane: Completely solid, glare-free, paper-like reading canvas */
-.iris-reading-pane,
-navigation-split-view > widget.content-pane .iris-reading-pane {
-  background-color: #1b1f2a;
-}
-
-.iris-reading-pane headerbar,
-.iris-reading-pane scrolledwindow {
-  background-color: #1b1f2a;
-}
-
-.iris-reading-pane headerbar {
-  border-bottom: 1px solid alpha(#ffffff, 0.05);
-}
-
-/* Inset Grouped Mail Cards (iOS Mail aesthetic) */
-.iris-thread-card {
-  margin: 3px 8px;
-  padding: 11px 13px;
-  border-radius: 10px;
-  background-color: #212634;
-  border: 1px solid alpha(#ffffff, 0.04);
-  transition: background-color 120ms ease, border-color 120ms ease;
-}
-
-.iris-thread-card:hover {
-  background-color: #282e3f;
-}
-
-.iris-thread-card:selected,
-.iris-thread-card.active {
-  background-color: alpha(#8fa368, 0.22); /* Attic Olive accent */
-  border-color: alpha(#8fa368, 0.55);
-}
-
-/* Unread Badge (Attic Olive dot) */
-.iris-unread-badge {
-  min-width: 8px;
-  min-height: 8px;
-  border-radius: 50%;
-  background-color: #8fa368;
-  box-shadow: 0 0 6px alpha(#8fa368, 0.6);
-}
-
-/* Search Bar & Live Filter in Thread List */
+/* Inline Search / Filter */
 .iris-search-entry {
-  background-color: #212634;
+  background-color: alpha(@theme_text, 0.04);
   border-radius: 8px;
-  border: 1px solid alpha(#ffffff, 0.05);
+  border: 1px solid alpha(@theme_text, 0.08);
   font-size: 13px;
-  color: #f1f5f9;
+  color: @theme_text;
+  padding: 2px 6px;
 }
 
 .iris-search-entry:focus-within {
-  border-color: alpha(#8fa368, 0.6);
-  box-shadow: 0 0 0 1px alpha(#8fa368, 0.3);
+  border-color: alpha(@theme_accent, 0.70);
+  box-shadow: 0 0 0 1px alpha(@theme_accent, 0.35);
 }
 
 .iris-palette-trigger {
-  background-color: #212634;
+  background-color: alpha(@theme_text, 0.04);
   border-radius: 8px;
-  color: #94a3b8;
+  color: @theme_dim_text;
   padding: 6px 10px;
 }
 
 .iris-palette-trigger:hover {
-  background-color: #282e3f;
-  color: #f1f5f9;
+  background-color: alpha(@theme_text, 0.08);
+  color: @theme_text;
 }
 
-/* Star Badge */
-.iris-star-badge {
-  color: #f59e0b;
+/* Mimestream Typeset Message Rows */
+.iris-thread-card,
+.iris-message-row {
+  margin: 1px 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background-color: transparent;
+  border: 1px solid transparent;
+  transition: background-color 100ms ease, border-color 100ms ease;
 }
 
-/* Unread Subject */
+.iris-thread-card:hover,
+.iris-message-row:hover {
+  background-color: alpha(#ffffff, 0.05);
+}
+
+.iris-thread-card:selected,
+.iris-message-row:selected {
+  background-color: alpha(@theme_accent, 0.20);
+  border: 1px solid alpha(@theme_accent, 0.50);
+}
+
+.iris-thread-card:focus-visible,
+.iris-message-row:focus-visible {
+  outline: 2px solid alpha(@theme_accent, 0.70);
+  outline-offset: -1px;
+}
+
+/* Unread Indicator Dot (Mimestream small 7px dot) */
+.iris-unread-dot {
+  min-width: 7px;
+  min-height: 7px;
+  border-radius: 50%;
+  background-color: @theme_accent;
+  box-shadow: 0 0 6px alpha(@theme_accent, 0.5);
+}
+
+.iris-unread-placeholder {
+  min-width: 7px;
+  min-height: 7px;
+  background-color: transparent;
+}
+
+/* Typography Hierarchy */
+.iris-sender-unread {
+  font-weight: 600;
+  font-size: 13px;
+  color: @theme_text;
+}
+
+.iris-sender-read {
+  font-weight: 400;
+  font-size: 13px;
+  color: @theme_text;
+}
+
 .iris-subject-unread {
   font-weight: 600;
-  color: #ffffff;
+  color: @theme_text;
 }
 
-/* Reading Body */
+.iris-star-badge {
+  color: @theme_highlight;
+}
+
+/* ========================================================================= */
+/* 3. READING PANE (Spacious, Quiet, Comfortable Reading Canvas)             */
+/* ========================================================================= */
+.iris-reading-pane,
+navigation-split-view > widget.content-pane .iris-reading-pane {
+  background-color: @theme_reader;
+}
+
+.iris-reading-pane headerbar,
+.iris-reading-pane scrolledwindow {
+  background-color: @theme_reader;
+}
+
+.iris-reading-pane headerbar {
+  border-bottom: 1px solid alpha(@theme_text, 0.06);
+}
+
+/* Reading Body Text */
 .iris-reading-body {
   font-size: 15px;
   line-height: 1.6;
-  color: #e2e8f0;
+  color: @theme_text;
 }
 
 .iris-reading-body a {
@@ -187,32 +221,58 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 /* Privacy Protection Banner */
 .iris-privacy-banner {
-  background-color: alpha(#212634, 0.85);
-  border: 1px solid alpha(#8fa368, 0.3);
-  border-radius: 10px;
-  margin: 12px 28px 0 28px;
-  padding: 8px 16px;
-  font-size: 13px;
+  background-color: alpha(@theme_surface, 0.85);
+  border: 1px solid alpha(@theme_accent, 0.35);
+  border-radius: 8px;
+  margin: 10px 28px 0 28px;
+  padding: 6px 14px;
+  font-size: 12px;
 }
 
 .iris-shield-icon {
-  color: #8fa368;
+  color: @theme_accent;
 }
 
 .iris-pill-btn {
   border-radius: 6px;
   font-size: 12px;
-  padding: 4px 10px;
+  padding: 3px 9px;
 }
 
 .iris-pill-btn:hover {
-  background-color: alpha(#8fa368, 0.2);
-  color: #ffffff;
+  background-color: alpha(@theme_accent, 0.20);
+  color: @theme_text;
 }
 
-/* Command Palette Dialog */
+/* ========================================================================= */
+/* 4. COMPACT COMPOSE DIALOG                                                 */
+/* ========================================================================= */
+.iris-compose {
+  background-color: @theme_surface;
+}
+
+.iris-compose-fields {
+  border-bottom: 1px solid alpha(@theme_text, 0.07);
+  padding-bottom: 4px;
+}
+
+.iris-compose-row {
+  padding: 3px 0;
+}
+
+.iris-compose-body {
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: @theme_text;
+}
+
+/* ========================================================================= */
+/* 5. COMMAND PALETTE & FLOATING OVERLAYS                                     */
+/* ========================================================================= */
 .iris-command-search {
-  background-color: #212634;
+  background-color: alpha(@theme_surface, 0.95);
   border-radius: 8px;
 }
 
@@ -226,34 +286,14 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 }
 
 .iris-palette-row:selected {
-  background-color: alpha(#8fa368, 0.25);
+  background-color: alpha(@theme_accent, 0.25);
 }
 
-/* Compose Dialog */
-.iris-compose {
-  background-color: #181b24;
-}
-
-.iris-compose-body {
-  background-color: #1c202b;
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 14px;
-}
-
-/* Privacy Protection Banner */
-.iris-privacy-banner {
-  background-color: #212634;
-  border-bottom: 1px solid alpha(#ffffff, 0.06);
-  padding: 8px 16px;
-  font-size: 12px;
-}
-
-/* Undo Send Toast */
+/* Undo Action Toasts */
 .iris-undo-toast {
-  background-color: #171a23;
-  border: 1px solid #8fa368;
+  background-color: @theme_surface;
+  border: 1px solid @theme_accent;
   border-radius: 8px;
   padding: 10px 18px;
-  box-shadow: 0 8px 24px alpha(#000000, 0.6);
+  box-shadow: 0 8px 24px alpha(#000000, 0.5);
 }

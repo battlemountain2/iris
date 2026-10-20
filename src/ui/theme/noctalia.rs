@@ -137,6 +137,7 @@ pub fn tokens_from_css(source: &str) -> Option<ThemeTokens> {
         highlight: blend(&surface, &accent, 0.18),
         border: blend(&surface, &text, 0.24),
         dim_text: blend(&surface, &text, 0.65),
+        reader_surface: None,
         background,
         surface,
         text,

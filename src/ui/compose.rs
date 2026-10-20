@@ -9,7 +9,7 @@ pub struct ComposeDialog {
     to_entry: gtk::Entry,
     subject_entry: gtk::Entry,
     body_view: gtk::TextView,
-    from_combo: adw::ComboRow,
+    from_dropdown: gtk::DropDown,
 }
 
 impl ComposeDialog {
@@ -19,8 +19,8 @@ impl ComposeDialog {
     {
         let dialog = adw::Dialog::builder()
             .title("New Message")
-            .content_width(680)
-            .content_height(540)
+            .content_width(700)
+            .content_height(560)
             .build();
 
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -39,48 +39,86 @@ impl ComposeDialog {
         });
         header.pack_start(&cancel_btn);
 
-        let send_btn = gtk::Button::builder().label("Send").build();
+        let send_btn = gtk::Button::builder()
+            .label("Send")
+            .tooltip_text("Save Draft (SMTP transport queue in development)")
+            .build();
         send_btn.add_css_class("suggested-action");
         header.pack_end(&send_btn);
 
         vbox.append(&header);
 
-        // Grouped Fields (From, To, Subject)
-        let pref_group = adw::PreferencesGroup::new();
-        pref_group.set_margin_start(16);
-        pref_group.set_margin_end(16);
-        pref_group.set_margin_top(8);
-        pref_group.set_margin_bottom(8);
+        // Compact Address Header (From, To, Subject)
+        let fields_vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        fields_vbox.add_css_class("iris-compose-fields");
+        fields_vbox.set_margin_start(16);
+        fields_vbox.set_margin_end(16);
+        fields_vbox.set_margin_top(8);
+        fields_vbox.set_margin_bottom(8);
 
-        let from_combo = adw::ComboRow::builder()
-            .title("From")
-            .model(&gtk::StringList::new(&[
-                "Gmail (Personal) <bry@gmail.com>",
-                "Gmail (Work) <brayan@work.com>",
-                "iCloud <brayan@icloud.com>",
-            ]))
+        // From line
+        let from_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        from_hbox.add_css_class("iris-compose-row");
+        let from_lbl = gtk::Label::builder()
+            .label("From:")
+            .xalign(0.0)
+            .width_chars(7)
             .build();
-        pref_group.add(&from_combo);
+        from_lbl.add_css_class("caption");
+        from_lbl.add_css_class("dim-label");
+        from_hbox.append(&from_lbl);
 
-        let to_row = adw::ActionRow::builder().title("To").build();
+        let from_dropdown = gtk::DropDown::from_strings(&[
+            "Gmail (Personal) <bry@gmail.com>",
+            "Gmail (Work) <brayan@work.com>",
+            "iCloud <brayan@icloud.com>",
+        ]);
+        from_dropdown.set_hexpand(true);
+        from_dropdown.add_css_class("flat");
+        from_hbox.append(&from_dropdown);
+        fields_vbox.append(&from_hbox);
+
+        // To line
+        let to_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        to_hbox.add_css_class("iris-compose-row");
+        let to_lbl = gtk::Label::builder()
+            .label("To:")
+            .xalign(0.0)
+            .width_chars(7)
+            .build();
+        to_lbl.add_css_class("caption");
+        to_lbl.add_css_class("dim-label");
+        to_hbox.append(&to_lbl);
+
         let to_entry = gtk::Entry::builder()
             .placeholder_text("recipient@example.com")
             .hexpand(true)
             .build();
         to_entry.add_css_class("flat");
-        to_row.add_suffix(&to_entry);
-        pref_group.add(&to_row);
+        to_hbox.append(&to_entry);
+        fields_vbox.append(&to_hbox);
 
-        let subject_row = adw::ActionRow::builder().title("Subject").build();
+        // Subject line
+        let subject_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        subject_hbox.add_css_class("iris-compose-row");
+        let subject_lbl = gtk::Label::builder()
+            .label("Subject:")
+            .xalign(0.0)
+            .width_chars(7)
+            .build();
+        subject_lbl.add_css_class("caption");
+        subject_lbl.add_css_class("dim-label");
+        subject_hbox.append(&subject_lbl);
+
         let subject_entry = gtk::Entry::builder()
             .placeholder_text("Subject")
             .hexpand(true)
             .build();
         subject_entry.add_css_class("flat");
-        subject_row.add_suffix(&subject_entry);
-        pref_group.add(&subject_row);
+        subject_hbox.append(&subject_entry);
+        fields_vbox.append(&subject_hbox);
 
-        vbox.append(&pref_group);
+        vbox.append(&fields_vbox);
 
         // Body Editor
         let scrolled = gtk::ScrolledWindow::builder()
@@ -126,7 +164,7 @@ impl ComposeDialog {
             to_entry,
             subject_entry,
             body_view,
-            from_combo,
+            from_dropdown,
         }
     }
 

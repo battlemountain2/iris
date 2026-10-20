@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 
 pub mod noctalia;
 
-const BUILTIN_THEMES: [(&str, &str); 10] = [
+const BUILTIN_THEMES: [(&str, &str); 12] = [
+    ("iris-dark", include_str!("../../data/themes/attic-olive.toml")),
+    ("iris-light", include_str!("../../data/themes/iris-light.toml")),
     ("attic-olive", include_str!("../../data/themes/attic-olive.toml")),
     (
         "corinthian-bronze",
@@ -32,6 +34,8 @@ pub struct ThemeTokens {
     pub name: String,
     pub background: String,
     pub surface: String,
+    #[serde(default)]
+    pub reader_surface: Option<String>,
     pub text: String,
     pub accent: String,
     pub danger: String,
@@ -118,75 +122,68 @@ impl ThemeManager {
 
     pub fn apply_current(&self) {
         let tokens = self.current_tokens();
-        let is_subtle = *self.subtle_mode.borrow();
+        let reader_surface = tokens.reader_surface.as_deref().unwrap_or(&tokens.surface);
 
-        let css = if is_subtle {
-            // Subtle mode: Keep liquid glass window/surfaces, inject accent and status colors
-            format!(
-                "@define-color theme_accent {};\n\
-                 @define-color theme_danger {};\n\
-                 @define-color theme_highlight {};\n\
-                 .iris-unread-badge {{\n\
-                     background-color: {};\n\
-                     box-shadow: 0 0 8px alpha({}, 0.6);\n\
-                 }}\n\
-                 .iris-thread-card:selected {{\n\
-                     background-color: alpha({}, 0.22);\n\
-                     border-color: alpha({}, 0.55);\n\
-                 }}\n\
-                 .iris-sidebar row:selected {{\n\
-                     background-color: alpha({}, 0.25);\n\
-                 }}\n",
-                tokens.accent,
-                tokens.danger,
-                tokens.highlight,
-                tokens.accent,
-                tokens.accent,
-                tokens.accent,
-                tokens.accent,
-                tokens.accent,
-            )
-        } else {
-            // Full mode: Override background and surfaces too
-            format!(
-                "@define-color theme_bg {};\n\
-                 @define-color theme_surface {};\n\
-                 @define-color theme_text {};\n\
-                 @define-color theme_accent {};\n\
-                 @define-color theme_danger {};\n\
-                 @define-color theme_muted {};\n\
-                 @define-color theme_highlight {};\n\
-                 @define-color theme_border {};\n\
-                 @define-color theme_dim_text {};\n\
-                 .iris-thread-pane {{\n\
-                     background-color: {};\n\
-                 }}\n\
-                 .iris-reading-pane {{\n\
-                     background-color: {};\n\
-                 }}\n\
-                 .iris-unread-badge {{\n\
-                     background-color: {};\n\
-                 }}\n\
-                 .iris-thread-card:selected {{\n\
-                     background-color: alpha({}, 0.25);\n\
-                     border-color: {};\n\
-                 }}\n",
-                tokens.background,
-                tokens.surface,
-                tokens.text,
-                tokens.accent,
-                tokens.danger,
-                tokens.muted,
-                tokens.highlight,
-                tokens.border,
-                tokens.dim_text,
-                tokens.surface,
-                blend(&tokens.surface, &tokens.background, 0.4),
-                tokens.accent,
-                tokens.accent,
-                tokens.accent,
-            )
-        };
+        let css = format!(
+            "@define-color theme_bg {};\n\
+             @define-color theme_surface {};\n\
+             @define-color theme_reader {};\n\
+             @define-color theme_text {};\n\
+             @define-color theme_dim_text {};\n\
+             @define-color theme_muted {};\n\
+             @define-color theme_accent {};\n\
+             @define-color theme_danger {};\n\
+             @define-color theme_highlight {};\n\
+             @define-color theme_border {};\n\
+             \n\
+             .iris-thread-pane,\n\
+             navigation-split-view > widget.content-pane .iris-thread-pane {{\n\
+                 background-color: @theme_surface;\n\
+                 color: @theme_text;\n\
+             }}\n\
+             \n\
+             .iris-reading-pane,\n\
+             navigation-split-view > widget.content-pane .iris-reading-pane {{\n\
+                 background-color: @theme_reader;\n\
+                 color: @theme_text;\n\
+             }}\n\
+             \n\
+             .iris-unread-dot {{\n\
+                 background-color: @theme_accent;\n\
+                 box-shadow: 0 0 6px alpha(@theme_accent, 0.5);\n\
+             }}\n\
+             \n\
+             .iris-unread-badge {{\n\
+                 background-color: @theme_accent;\n\
+                 box-shadow: 0 0 6px alpha(@theme_accent, 0.5);\n\
+             }}\n\
+             \n\
+             .iris-star-badge {{\n\
+                 color: @theme_highlight;\n\
+             }}\n\
+             \n\
+             .iris-message-row:selected,\n\
+             .iris-thread-card:selected {{\n\
+                 background-color: alpha(@theme_accent, 0.22);\n\
+                 border-color: alpha(@theme_accent, 0.55);\n\
+             }}\n\
+             \n\
+             .iris-sidebar row:selected {{\n\
+                 background-color: alpha(@theme_accent, 0.28);\n\
+                 border-color: alpha(@theme_accent, 0.60);\n\
+                 color: #ffffff;\n\
+             }}\n",
+            tokens.background,
+            tokens.surface,
+            reader_surface,
+            tokens.text,
+            tokens.dim_text,
+            tokens.muted,
+            tokens.accent,
+            tokens.danger,
+            tokens.highlight,
+            tokens.border,
+        );
 
         self.css_provider.load_from_string(&css);
     }
