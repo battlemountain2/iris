@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use adw::prelude::*;
-use gtk::glib;
 
 use crate::model::Thread;
 

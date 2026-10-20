@@ -1,10 +1,12 @@
+#![allow(dead_code)]
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
-use mail_parser::MessageParser;
+use mail_parser::{MessageParser, MimeHeaders};
 
 use crate::model::{Account, AttachmentMeta, Message, Thread};
 

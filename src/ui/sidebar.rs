@@ -1,9 +1,8 @@
+#![allow(dead_code)]
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use adw::prelude::*;
-use gtk::glib;
-
-use crate::model::Mailbox;
 
 pub struct SidebarView {
     pub container: gtk::Box,
