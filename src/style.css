@@ -1,41 +1,81 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Iris Liquid-Glass & iOS Mail Theme Style */
 
-/* Base Window: Solid dark background so reading remains comfortable */
-window.iris-window {
-  background-color: #14161d;
+/* Root Window & Containers: Completely transparent so Hyprland sees the alpha buffer */
+window.iris-window,
+window.iris-window.background,
+window.iris-window > contents,
+navigation-split-view,
+navigation-split-view > navigation-page,
+navigation-split-view > navigation-page > .view {
+  background-color: transparent;
+  background-image: none;
   color: #f1f5f9;
 }
 
 /* Translucency RESTRAINED TO SIDEBAR (macOS / iOS Mail liquid glass) */
 .iris-sidebar {
-  background-color: alpha(#0d0f15, 0.52);
-  border-right: 1px solid alpha(#ffffff, 0.07);
+  background-color: alpha(#0a0c10, 0.42); /* Frosted liquid glass ground */
+  border-right: 1px solid alpha(#ffffff, 0.08);
+}
+
+.iris-sidebar headerbar,
+.iris-sidebar scrolledwindow,
+.iris-sidebar listview,
+.iris-sidebar .navigation-sidebar,
+.iris-sidebar list,
+.iris-sidebar box {
+  background-color: transparent;
+  background-image: none;
+}
+
+.iris-sidebar row {
+  background-color: transparent;
+  border-radius: 8px;
+  margin: 1px 8px;
+  transition: background-color 100ms ease;
+}
+
+.iris-sidebar row:hover {
+  background-color: alpha(#ffffff, 0.06);
+}
+
+.iris-sidebar row:selected {
+  background-color: alpha(#8fa368, 0.28); /* Attic Olive selection */
+  color: #ffffff;
 }
 
 .iris-sidebar headerbar {
-  background-color: transparent;
   border-bottom: 1px solid alpha(#ffffff, 0.05);
 }
 
-/* Thread List: Subtle dark canvas, near-solid with crisp inset cards */
+/* Thread List: Solid dark canvas with crisp inset cards */
 .iris-thread-pane {
-  background-color: #181b24;
+  background-color: #171a23;
   border-right: 1px solid alpha(#ffffff, 0.06);
 }
 
+.iris-thread-pane headerbar,
+.iris-thread-pane scrolledwindow,
+.iris-thread-pane list {
+  background-color: #171a23;
+}
+
 .iris-thread-pane headerbar {
-  background-color: #181b24;
   border-bottom: 1px solid alpha(#ffffff, 0.05);
 }
 
 /* Reading Pane: Completely solid, glare-free, paper-like reading canvas */
 .iris-reading-pane {
-  background-color: #1c202b;
+  background-color: #1b1f2a;
+}
+
+.iris-reading-pane headerbar,
+.iris-reading-pane scrolledwindow {
+  background-color: #1b1f2a;
 }
 
 .iris-reading-pane headerbar {
-  background-color: #1c202b;
   border-bottom: 1px solid alpha(#ffffff, 0.05);
 }
 
@@ -44,13 +84,13 @@ window.iris-window {
   margin: 3px 8px;
   padding: 11px 13px;
   border-radius: 10px;
-  background-color: alpha(#232836, 0.50);
+  background-color: #212634;
   border: 1px solid alpha(#ffffff, 0.04);
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
 .iris-thread-card:hover {
-  background-color: alpha(#2a3042, 0.85);
+  background-color: #282e3f;
 }
 
 .iris-thread-card:selected,
@@ -70,7 +110,7 @@ window.iris-window {
 
 /* Search Trigger Bar in Thread List */
 .iris-search-trigger {
-  background-color: alpha(#232836, 0.6);
+  background-color: #212634;
   border-radius: 8px;
   color: #94a3b8;
   font-size: 12px;
@@ -78,13 +118,13 @@ window.iris-window {
 }
 
 .iris-search-trigger:hover {
-  background-color: alpha(#2a3042, 0.8);
+  background-color: #282e3f;
   color: #f1f5f9;
 }
 
 /* Privacy Protection Banner */
 .iris-privacy-banner {
-  background-color: alpha(#232836, 0.90);
+  background-color: #212634;
   border-bottom: 1px solid alpha(#ffffff, 0.06);
   padding: 8px 16px;
   font-size: 12px;
@@ -92,7 +132,7 @@ window.iris-window {
 
 /* Undo Send Toast */
 .iris-undo-toast {
-  background-color: #181b24;
+  background-color: #171a23;
   border: 1px solid #8fa368;
   border-radius: 8px;
   padding: 10px 18px;
