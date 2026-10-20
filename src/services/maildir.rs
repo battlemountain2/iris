@@ -249,8 +249,15 @@ fn group_into_threads(mut messages: Vec<Message>) -> Vec<Thread> {
 
 fn normalize_subject(subject: &str) -> String {
     let mut s = subject.trim();
-    while s.to_lowercase().starts_with("re:") || s.to_lowercase().starts_with("fwd:") {
-        s = s[3..].trim();
+    loop {
+        let lower = s.to_lowercase();
+        if lower.starts_with("re:") {
+            s = s[3..].trim();
+        } else if lower.starts_with("fwd:") {
+            s = s[4..].trim();
+        } else {
+            break;
+        }
     }
     s.to_lowercase()
 }
@@ -268,4 +275,39 @@ fn format_account_name(raw: &str) -> String {
         })
         .collect::<Vec<String>>()
         .join(" ")
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_subject() {
+        assert_eq!(normalize_subject("Re: Hello World"), "hello world");
+        assert_eq!(normalize_subject("fwd: Re: [Hermes] Update"), "[hermes] update");
+        assert_eq!(normalize_subject("Plain Subject"), "plain subject");
+    }
+
+    #[test]
+    fn test_format_account_name() {
+        assert_eq!(format_account_name("gmail-work"), "Gmail Work");
+        assert_eq!(format_account_name("icloud_personal"), "Icloud Personal");
+    }
+
+    #[test]
+    fn test_parse_sample_rfc822() {
+        let raw = b"From: Sender <sender@example.com>\r\n\
+                    To: Recipient <recip@example.com>\r\n\
+                    Subject: Test Subject\r\n\
+                    Date: Mon, 19 Oct 2026 12:00:00 +0000\r\n\
+                    \r\n\
+                    Test email body content.";
+        let msg = parse_rfc822(raw, Path::new("dummy.eml"), true, false).expect("valid parse");
+        assert_eq!(msg.subject, "Test Subject");
+        assert!(msg.from.contains("sender@example.com"));
+        assert_eq!(msg.body_plain.as_deref(), Some("Test email body content."));
+        assert!(msg.is_unread);
+        assert!(!msg.is_flagged);
+    }
 }

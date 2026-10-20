@@ -5,6 +5,7 @@ mod services;
 mod ui;
 
 use std::path::PathBuf;
+use std::rc::Rc;
 use adw::prelude::*;
 use gtk::glib;
 
@@ -59,10 +60,16 @@ fn build_ui(app: &adw::Application) {
 
     window.add_css_class("iris-window");
 
+    // Initialize Theme Manager (Noctalia, Greek themes, Subtle mode)
+    let theme_manager = ui::ThemeManager::new();
+
     // Initialize Maildir Scanner & Seed Demo Emails if directory is empty
     let mail_root = get_mail_root();
     let scanner = services::MaildirScanner::new(mail_root.clone());
     let _ = scanner.ensure_demo_data();
+
+    // Toast Overlay for 10-Second Undo Send
+    let toast_overlay = adw::ToastOverlay::new();
 
     // Outer split view (Sidebar -> Content)
     let outer_split = adw::NavigationSplitView::new();
@@ -119,7 +126,6 @@ fn build_ui(app: &adw::Application) {
     outer_split.set_content(Some(&content_page));
 
     // Adaptive Breakpoints: Automatic folding on narrow / floating Hyprland splits
-    // Breakpoint 1 (< 960px): Collapse sidebar into overlay drawer with toggle button
     let bp_tablet = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
         adw::BreakpointConditionLengthType::MaxWidth,
         960.0,
@@ -128,7 +134,6 @@ fn build_ui(app: &adw::Application) {
     bp_tablet.add_setter(&outer_split, "collapsed", Some(&true.into()));
     window.add_breakpoint(bp_tablet);
 
-    // Breakpoint 2 (< 620px): Collapse thread list into single-pane iPhone mode
     let bp_compact = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
         adw::BreakpointConditionLengthType::MaxWidth,
         620.0,
@@ -137,6 +142,39 @@ fn build_ui(app: &adw::Application) {
     bp_compact.add_setter(&inner_split, "collapsed", Some(&true.into()));
     window.add_breakpoint(bp_compact);
 
-    window.set_content(Some(&outer_split));
+    toast_overlay.set_child(Some(&outer_split));
+    window.set_content(Some(&toast_overlay));
+
+    // Command Palette (Ctrl+K)
+    let palette = Rc::new(ui::CommandPalette::new(theme_manager.clone()));
+    let palette_ref = palette.clone();
+    let win_for_palette = window.clone();
+    thread_view.search_button.connect_clicked(move |_| {
+        palette_ref.present(&win_for_palette);
+    });
+
+    // Compose View & Undo Send Toast
+    let toast_overlay_ref = toast_overlay.clone();
+    let compose_dialog = Rc::new(ui::ComposeDialog::new(move |to, _subject, _body| {
+        let to_for_undo = to.clone();
+        ui::show_undo_toast(&toast_overlay_ref, &to, move || {
+            tracing::info!("Undoing send for message to {to_for_undo}");
+        });
+    }));
+
+    let compose_ref = compose_dialog.clone();
+    let win_for_compose = window.clone();
+    thread_view.compose_btn.connect_clicked(move |_| {
+        compose_ref.present(&win_for_compose);
+    });
+
+    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, /)
+    ui::setup_window_keybindings(
+        &window,
+        palette,
+        compose_dialog,
+        thread_view.list_box.clone(),
+    );
+
     window.present();
 }

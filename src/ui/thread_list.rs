@@ -9,6 +9,8 @@ pub struct ThreadListView {
     pub list_box: gtk::ListBox,
     pub title: adw::WindowTitle,
     pub sidebar_toggle_btn: gtk::Button,
+    pub compose_btn: gtk::Button,
+    pub search_button: gtk::Button,
 }
 
 impl ThreadListView {
@@ -86,6 +88,8 @@ impl ThreadListView {
             list_box,
             title,
             sidebar_toggle_btn,
+            compose_btn,
+            search_button,
         }
     }
 
