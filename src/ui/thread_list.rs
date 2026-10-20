@@ -8,6 +8,7 @@ pub struct ThreadListView {
     pub container: gtk::Box,
     pub list_box: gtk::ListBox,
     pub title: adw::WindowTitle,
+    pub sidebar_toggle_btn: gtk::Button,
 }
 
 impl ThreadListView {
@@ -15,15 +16,17 @@ impl ThreadListView {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         container.add_css_class("iris-thread-pane");
 
-        // Headerbar with Title, Filter, and Compose Button
+        // Headerbar with Sidebar Toggle, Title, Filter, and Compose Button
         let header = adw::HeaderBar::new();
         header.set_show_start_title_buttons(false);
 
-        let title = adw::WindowTitle::builder()
-            .title("Inbox")
-            .subtitle("Loading...")
+        // Sidebar toggle button (iOS / macOS Mail sidebar toggle icon)
+        let sidebar_toggle_btn = gtk::Button::builder()
+            .icon_name("sidebar-show-symbolic")
+            .tooltip_text("Toggle Mailboxes (Ctrl+S)")
             .build();
-        header.set_title_widget(Some(&title));
+        sidebar_toggle_btn.add_css_class("flat");
+        header.pack_start(&sidebar_toggle_btn);
 
         let filter_btn = gtk::Button::builder()
             .icon_name("view-filter-symbolic")
@@ -31,6 +34,12 @@ impl ThreadListView {
             .build();
         filter_btn.add_css_class("flat");
         header.pack_start(&filter_btn);
+
+        let title = adw::WindowTitle::builder()
+            .title("Inbox")
+            .subtitle("Loading...")
+            .build();
+        header.set_title_widget(Some(&title));
 
         let compose_btn = gtk::Button::builder()
             .icon_name("mail-message-new-symbolic")
@@ -76,6 +85,7 @@ impl ThreadListView {
             container,
             list_box,
             title,
+            sidebar_toggle_btn,
         }
     }
 
