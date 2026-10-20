@@ -1,21 +1,27 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Iris Liquid-Glass & iOS Mail Theme Style */
 
-/* Root Window & Containers: Completely transparent so Hyprland sees the alpha buffer */
+/* Root Window, Containers, and Internal Split Panes: Pure Transparent */
 window.iris-window,
 window.iris-window.background,
 window.iris-window > contents,
+toast-overlay,
+toast-overlay > *,
 navigation-split-view,
+navigation-split-view > widget.sidebar-pane,
+navigation-split-view > widget.content-pane,
+navigation-split-view > navigation-view,
 navigation-split-view > navigation-page,
-navigation-split-view > navigation-page > .view {
-  background-color: transparent;
-  background-image: none;
+navigation-split-view > navigation-page > .view,
+.sidebar-pane {
+  background-color: transparent !important;
+  background-image: none !important;
   color: #f1f5f9;
 }
 
 /* Translucency RESTRAINED TO SIDEBAR (macOS / iOS Mail liquid glass) */
 .iris-sidebar {
-  background-color: alpha(#0a0c12, 0.28); /* Lower alpha = more wallpaper blur visible */
+  background-color: alpha(#07090e, 0.25) !important; /* Low alpha for crisp wallpaper blur */
   border-right: 1px solid alpha(#ffffff, 0.08);
 }
 
@@ -25,8 +31,8 @@ navigation-split-view > navigation-page > .view {
 .iris-sidebar .navigation-sidebar,
 .iris-sidebar list,
 .iris-sidebar box {
-  background-color: transparent;
-  background-image: none;
+  background-color: transparent !important;
+  background-image: none !important;
 }
 
 .iris-sidebar row {
@@ -50,15 +56,16 @@ navigation-split-view > navigation-page > .view {
 }
 
 /* Thread List: Solid dark canvas with crisp inset cards */
-.iris-thread-pane {
-  background-color: #171a23;
+.iris-thread-pane,
+navigation-split-view > widget.content-pane .iris-thread-pane {
+  background-color: #171a23 !important;
   border-right: 1px solid alpha(#ffffff, 0.06);
 }
 
 .iris-thread-pane headerbar,
 .iris-thread-pane scrolledwindow,
 .iris-thread-pane list {
-  background-color: #171a23;
+  background-color: #171a23 !important;
 }
 
 .iris-thread-pane headerbar {
@@ -66,13 +73,14 @@ navigation-split-view > navigation-page > .view {
 }
 
 /* Reading Pane: Completely solid, glare-free, paper-like reading canvas */
-.iris-reading-pane {
-  background-color: #1b1f2a;
+.iris-reading-pane,
+navigation-split-view > widget.content-pane .iris-reading-pane {
+  background-color: #1b1f2a !important;
 }
 
 .iris-reading-pane headerbar,
 .iris-reading-pane scrolledwindow {
-  background-color: #1b1f2a;
+  background-color: #1b1f2a !important;
 }
 
 .iris-reading-pane headerbar {
@@ -120,6 +128,37 @@ navigation-split-view > navigation-page > .view {
 .iris-search-trigger:hover {
   background-color: #282e3f;
   color: #f1f5f9;
+}
+
+/* Command Palette Dialog */
+.iris-command-search {
+  background-color: #212634;
+  border-radius: 8px;
+}
+
+.iris-palette-row {
+  border-radius: 8px;
+  margin: 2px 4px;
+}
+
+.iris-palette-row:hover {
+  background-color: alpha(#ffffff, 0.06);
+}
+
+.iris-palette-row:selected {
+  background-color: alpha(#8fa368, 0.25);
+}
+
+/* Compose Dialog */
+.iris-compose {
+  background-color: #181b24;
+}
+
+.iris-compose-body {
+  background-color: #1c202b;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
 }
 
 /* Privacy Protection Banner */

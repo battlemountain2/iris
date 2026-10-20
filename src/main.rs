@@ -53,10 +53,12 @@ fn get_mail_root() -> PathBuf {
 fn build_ui(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .title("Iris")
+        .title("Iris (Ctrl+K for Command Palette)")
         .default_width(1060)
         .default_height(720)
         .build();
+
+    println!("✉️  Iris Mail v0.1.0 initialized — Ctrl+K = Command Palette, c = Compose, j/k = Navigate");
 
     window.add_css_class("iris-window");
 
