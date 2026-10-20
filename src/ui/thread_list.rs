@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::cell::RefCell;
 use adw::prelude::*;
 
 use crate::model::Thread;
@@ -10,8 +11,11 @@ pub struct ThreadListView {
     pub title: adw::WindowTitle,
     pub sidebar_toggle_btn: gtk::Button,
     pub compose_btn: gtk::Button,
-    pub search_button: gtk::Button,
-    pub threads: std::cell::RefCell<Vec<Thread>>,
+    pub search_entry: gtk::SearchEntry,
+    pub palette_btn: gtk::Button,
+    pub all_threads: RefCell<Vec<Thread>>,
+    pub visible_threads: RefCell<Vec<Thread>>,
+    pub threads: RefCell<Vec<Thread>>, // alias for visible threads
 }
 
 impl ThreadListView {
@@ -31,13 +35,6 @@ impl ThreadListView {
         sidebar_toggle_btn.add_css_class("flat");
         header.pack_start(&sidebar_toggle_btn);
 
-        let filter_btn = gtk::Button::builder()
-            .icon_name("view-filter-symbolic")
-            .tooltip_text("Filter unread only")
-            .build();
-        filter_btn.add_css_class("flat");
-        header.pack_start(&filter_btn);
-
         let title = adw::WindowTitle::builder()
             .title("Inbox")
             .subtitle("Loading...")
@@ -53,21 +50,28 @@ impl ThreadListView {
 
         container.append(&header);
 
-        // Search trigger bar (Ctrl+K omnibar)
-        let search_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        // Search trigger & live filter bar
+        let search_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         search_box.set_margin_start(10);
         search_box.set_margin_end(10);
         search_box.set_margin_top(6);
         search_box.set_margin_bottom(6);
 
-        let search_button = gtk::Button::builder()
-            .label("Search mail, contacts, tags... (Ctrl+K)")
-            .icon_name("edit-find-symbolic")
+        let search_entry = gtk::SearchEntry::builder()
+            .placeholder_text("Filter conversations... (/)")
             .hexpand(true)
             .build();
-        search_button.add_css_class("flat");
-        search_button.add_css_class("iris-search-trigger");
-        search_box.append(&search_button);
+        search_entry.add_css_class("iris-search-entry");
+        search_box.append(&search_entry);
+
+        let palette_btn = gtk::Button::builder()
+            .icon_name("system-search-symbolic")
+            .tooltip_text("Command Palette (Ctrl+K)")
+            .build();
+        palette_btn.add_css_class("flat");
+        palette_btn.add_css_class("iris-palette-trigger");
+        search_box.append(&palette_btn);
+
         container.append(&search_box);
 
         // Scrolled window of thread cards
@@ -84,29 +88,98 @@ impl ThreadListView {
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
 
+        let all_threads = RefCell::new(Vec::new());
+        let visible_threads = RefCell::new(Vec::new());
+        let threads = RefCell::new(Vec::new());
+
         Self {
             container,
             list_box,
             title,
             sidebar_toggle_btn,
             compose_btn,
-            search_button,
-            threads: std::cell::RefCell::new(Vec::new()),
+            search_entry,
+            palette_btn,
+            all_threads,
+            visible_threads,
+            threads,
         }
     }
 
-    /// Populates the list box with real threads scanned from Maildir.
+    /// Sets the full list of threads for the current folder and applies active search filter.
     pub fn set_threads(&self, threads: &[Thread]) {
-        *self.threads.borrow_mut() = threads.to_vec();
+        *self.all_threads.borrow_mut() = threads.to_vec();
+        self.apply_filter(&self.search_entry.text());
+    }
+
+    /// Filters and populates visible thread cards based on the search query.
+    pub fn apply_filter(&self, query: &str) {
+        let q = query.trim().to_lowercase();
+        let all = self.all_threads.borrow();
+
+        let filtered: Vec<Thread> = if q.is_empty() {
+            all.clone()
+        } else {
+            all.iter()
+                .filter(|t| {
+                    t.subject.to_lowercase().contains(&q)
+                        || t.snippet.to_lowercase().contains(&q)
+                        || t.senders.iter().any(|s| s.to_lowercase().contains(&q))
+                })
+                .cloned()
+                .collect()
+        };
+
+        *self.threads.borrow_mut() = filtered.clone();
+        *self.visible_threads.borrow_mut() = filtered.clone();
 
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
         }
 
-        let unread_count = threads.iter().filter(|t| t.is_unread).count();
-        self.title.set_subtitle(&format!("{unread_count} unread"));
+        let unread_count = filtered.iter().filter(|t| t.is_unread).count();
+        if q.is_empty() {
+            self.title.set_subtitle(&format!("{unread_count} unread"));
+        } else {
+            self.title.set_subtitle(&format!("{} matching", filtered.len()));
+        }
 
-        for thread in threads {
+        if filtered.is_empty() {
+            let empty_row = gtk::ListBoxRow::new();
+            empty_row.set_selectable(false);
+            empty_row.set_activatable(false);
+
+            let empty_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            empty_box.set_margin_top(32);
+            empty_box.set_margin_bottom(32);
+            empty_box.set_halign(gtk::Align::Center);
+
+            let icon = gtk::Image::from_icon_name(if q.is_empty() {
+                "mail-box-symbolic"
+            } else {
+                "edit-find-symbolic"
+            });
+            icon.set_icon_size(gtk::IconSize::Large);
+            icon.add_css_class("dim-label");
+            empty_box.append(&icon);
+
+            let label = gtk::Label::builder()
+                .label(if q.is_empty() {
+                    "Inbox zero. All caught up! ✨"
+                } else {
+                    "No matching conversations found."
+                })
+                .build();
+            label.add_css_class("caption");
+            label.add_css_class("dim-label");
+            empty_box.append(&label);
+
+            empty_row.set_child(Some(&empty_box));
+            self.list_box.append(&empty_row);
+            return;
+        }
+
+        for thread in &filtered {
             let sender = thread
                 .senders
                 .first()
@@ -120,6 +193,7 @@ impl ThreadListView {
                 &thread.snippet,
                 &date_str,
                 thread.is_unread,
+                thread.is_flagged,
                 false,
             );
             self.list_box.append(&row);
@@ -133,6 +207,7 @@ fn create_thread_card(
     snippet: &str,
     date: &str,
     is_unread: bool,
+    is_flagged: bool,
     has_attachment: bool,
 ) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
@@ -140,7 +215,7 @@ fn create_thread_card(
 
     let card_vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
 
-    // Top line: Unread dot + Sender + Date
+    // Top line: Unread dot + Sender + Attachment + Flag + Date
     let top_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
 
     if is_unread {
@@ -161,6 +236,12 @@ fn create_thread_card(
         sender_label.add_css_class("body");
     }
     top_hbox.append(&sender_label);
+
+    if is_flagged {
+        let star_icon = gtk::Image::from_icon_name("starred-symbolic");
+        star_icon.add_css_class("iris-star-badge");
+        top_hbox.append(&star_icon);
+    }
 
     if has_attachment {
         let attach_icon = gtk::Image::from_icon_name("mail-attachment-symbolic");
@@ -183,6 +264,7 @@ fn create_thread_card(
         .build();
     if is_unread {
         subject_label.add_css_class("body");
+        subject_label.add_css_class("iris-subject-unread");
     } else {
         subject_label.add_css_class("dim-label");
     }

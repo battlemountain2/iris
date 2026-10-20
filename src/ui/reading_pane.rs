@@ -2,10 +2,11 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use adw::prelude::*;
 
 use crate::model::Thread;
+use crate::services::html_renderer::render_body_markup;
 
 pub struct ReadingPaneView {
     pub container: gtk::Box,
@@ -20,8 +21,11 @@ pub struct ReadingPaneView {
     pub date_label: gtk::Label,
     pub body_label: gtk::Label,
     pub privacy_banner: gtk::Box,
+    pub load_images_btn: gtk::Button,
+    pub always_load_btn: gtk::Button,
     pub timeline_strip: gtk::Box,
     pub attachment_box: gtk::Box,
+    pub allow_remote_images: Cell<bool>,
     pub current_thread: RefCell<Option<Thread>>,
 }
 
@@ -55,7 +59,7 @@ impl ReadingPaneView {
         header.pack_end(&reply_btn);
 
         let star_btn = gtk::Button::builder()
-            .icon_name("starred-symbolic")
+            .icon_name("non-starred-symbolic")
             .tooltip_text("Star / Flag (s)")
             .build();
         star_btn.add_css_class("flat");
@@ -64,7 +68,7 @@ impl ReadingPaneView {
         container.append(&header);
 
         // Privacy Protection Banner
-        let privacy_banner = build_privacy_banner();
+        let (privacy_banner, load_images_btn, always_load_btn) = build_privacy_banner();
         privacy_banner.set_visible(false);
         container.append(&privacy_banner);
 
@@ -75,10 +79,10 @@ impl ReadingPaneView {
             .build();
 
         let content_box = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        content_box.set_margin_start(24);
-        content_box.set_margin_end(24);
-        content_box.set_margin_top(18);
-        content_box.set_margin_bottom(24);
+        content_box.set_margin_start(28);
+        content_box.set_margin_end(28);
+        content_box.set_margin_top(20);
+        content_box.set_margin_bottom(28);
 
         // Subject Title
         let subject_label = gtk::Label::builder()
@@ -100,14 +104,26 @@ impl ReadingPaneView {
         timeline_strip.set_visible(false);
         content_box.append(&timeline_strip);
 
-        // Message Body
+        // Message Body with Pango Markup and Clickable Links
         let body_label = gtk::Label::builder()
             .label("")
+            .use_markup(true)
             .xalign(0.0)
             .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
             .selectable(true)
             .build();
         body_label.add_css_class("body");
+        body_label.add_css_class("iris-reading-body");
+
+        // Clickable links launch default system browser
+        body_label.connect_activate_link(|_label, uri| {
+            if let Err(err) = gio::AppInfo::launch_default_for_uri(uri, None::<&gio::AppLaunchContext>) {
+                tracing::error!("Failed to launch link '{uri}': {err}");
+            }
+            glib::Propagation::Stop
+        });
+
         content_box.append(&body_label);
 
         // Attachment Container
@@ -117,6 +133,9 @@ impl ReadingPaneView {
 
         scrolled.set_child(Some(&content_box));
         container.append(&scrolled);
+
+        let current_thread = RefCell::new(None);
+        let allow_remote_images = Cell::new(false);
 
         Self {
             container,
@@ -131,29 +150,12 @@ impl ReadingPaneView {
             date_label,
             body_label,
             privacy_banner,
+            load_images_btn,
+            always_load_btn,
             timeline_strip,
             attachment_box,
-            current_thread: RefCell::new(None),
-        }
-    }
-
-    /// Resets the reading pane to an empty placeholder state when no thread is selected.
-    pub fn clear(&self) {
-        *self.current_thread.borrow_mut() = None;
-        self.subject_label.set_text("No conversation selected");
-        self.avatar.set_text(None);
-        self.name_label.set_text("");
-        self.email_label.set_text("");
-        self.date_label.set_text("");
-        self.body_label.set_text("");
-        self.privacy_banner.set_visible(false);
-        self.timeline_strip.set_visible(false);
-        self.attachment_box.set_visible(false);
-        while let Some(child) = self.timeline_strip.first_child() {
-            self.timeline_strip.remove(&child);
-        }
-        while let Some(child) = self.attachment_box.first_child() {
-            self.attachment_box.remove(&child);
+            allow_remote_images,
+            current_thread,
         }
     }
 
@@ -179,15 +181,29 @@ impl ReadingPaneView {
             .to_string();
         self.date_label.set_text(&date_str);
 
-        // Body text
-        let body_text = latest_msg
-            .and_then(|m| m.body_plain.as_deref())
-            .unwrap_or(&thread.snippet);
-        self.body_label.set_text(body_text);
+        // Rich HTML and linkified body rendering with Pango markup
+        let allow = self.allow_remote_images.get();
+        let markup = render_body_markup(
+            latest_msg.and_then(|m| m.body_html.as_deref()),
+            latest_msg.and_then(|m| m.body_plain.as_deref()),
+            allow,
+        );
+        self.body_label.set_markup(&markup);
 
-        // Remote image privacy banner
+        // Remote image privacy protection banner
         let has_remote = latest_msg.map(|m| m.has_remote_images).unwrap_or(false);
-        self.privacy_banner.set_visible(has_remote);
+        self.privacy_banner.set_visible(has_remote && !allow);
+
+        // Update Star icon
+        if thread.is_flagged {
+            self.star_btn.set_icon_name("starred-symbolic");
+            self.star_btn.set_tooltip_text(Some("Unstar (s)"));
+            self.star_btn.add_css_class("accent");
+        } else {
+            self.star_btn.set_icon_name("non-starred-symbolic");
+            self.star_btn.set_tooltip_text(Some("Star / Flag (s)"));
+            self.star_btn.remove_css_class("accent");
+        }
 
         // Timeline strip
         while let Some(child) = self.timeline_strip.first_child() {
@@ -232,32 +248,59 @@ impl ReadingPaneView {
 
         *self.current_thread.borrow_mut() = Some(thread.clone());
     }
+
+    /// Resets the reading pane to an empty placeholder state when no thread is selected.
+    pub fn clear(&self) {
+        *self.current_thread.borrow_mut() = None;
+        self.allow_remote_images.set(false);
+        self.subject_label.set_text("No conversation selected");
+        self.avatar.set_text(None);
+        self.name_label.set_text("");
+        self.email_label.set_text("");
+        self.date_label.set_text("");
+        self.body_label.set_markup("");
+        self.star_btn.set_icon_name("non-starred-symbolic");
+        self.privacy_banner.set_visible(false);
+        self.timeline_strip.set_visible(false);
+        self.attachment_box.set_visible(false);
+        while let Some(child) = self.timeline_strip.first_child() {
+            self.timeline_strip.remove(&child);
+        }
+        while let Some(child) = self.attachment_box.first_child() {
+            self.attachment_box.remove(&child);
+        }
+    }
 }
 
-fn build_privacy_banner() -> gtk::Box {
+fn build_privacy_banner() -> (gtk::Box, gtk::Button, gtk::Button) {
     let banner = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     banner.add_css_class("iris-privacy-banner");
 
     let shield_icon = gtk::Image::from_icon_name("security-high-symbolic");
+    shield_icon.add_css_class("iris-shield-icon");
     banner.append(&shield_icon);
 
     let text_label = gtk::Label::builder()
         .label("Remote images hidden to protect your privacy and block tracking.")
         .hexpand(true)
         .xalign(0.0)
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
         .build();
     text_label.add_css_class("caption");
     banner.append(&text_label);
 
     let load_once_btn = gtk::Button::builder().label("Load Images").build();
     load_once_btn.add_css_class("flat");
+    load_once_btn.add_css_class("iris-pill-btn");
     banner.append(&load_once_btn);
 
     let always_btn = gtk::Button::builder().label("Always Load").build();
     always_btn.add_css_class("flat");
+    always_btn.add_css_class("iris-pill-btn");
     banner.append(&always_btn);
 
-    banner
+    (banner, load_once_btn, always_btn)
 }
 
 fn build_sender_header() -> (
@@ -281,6 +324,7 @@ fn build_sender_header() -> (
     let name_label = gtk::Label::builder()
         .label("")
         .xalign(0.0)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     name_label.add_css_class("heading");
     vbox.append(&name_label);
@@ -288,6 +332,7 @@ fn build_sender_header() -> (
     let email_label = gtk::Label::builder()
         .label("")
         .xalign(0.0)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     email_label.add_css_class("caption");
     email_label.add_css_class("dim-label");

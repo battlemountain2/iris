@@ -116,18 +116,78 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
   box-shadow: 0 0 6px alpha(#8fa368, 0.6);
 }
 
-/* Search Trigger Bar in Thread List */
-.iris-search-trigger {
+/* Search Bar & Live Filter in Thread List */
+.iris-search-entry {
+  background-color: #212634;
+  border-radius: 8px;
+  border: 1px solid alpha(#ffffff, 0.05);
+  font-size: 13px;
+  color: #f1f5f9;
+}
+
+.iris-search-entry:focus-within {
+  border-color: alpha(#8fa368, 0.6);
+  box-shadow: 0 0 0 1px alpha(#8fa368, 0.3);
+}
+
+.iris-palette-trigger {
   background-color: #212634;
   border-radius: 8px;
   color: #94a3b8;
-  font-size: 12px;
   padding: 6px 10px;
 }
 
-.iris-search-trigger:hover {
+.iris-palette-trigger:hover {
   background-color: #282e3f;
   color: #f1f5f9;
+}
+
+/* Star Badge */
+.iris-star-badge {
+  color: #f59e0b;
+}
+
+/* Unread Subject */
+.iris-subject-unread {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Reading Body */
+.iris-reading-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #e2e8f0;
+}
+
+.iris-reading-body a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+/* Privacy Protection Banner */
+.iris-privacy-banner {
+  background-color: alpha(#212634, 0.85);
+  border: 1px solid alpha(#8fa368, 0.3);
+  border-radius: 10px;
+  margin: 12px 28px 0 28px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.iris-shield-icon {
+  color: #8fa368;
+}
+
+.iris-pill-btn {
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.iris-pill-btn:hover {
+  background-color: alpha(#8fa368, 0.2);
+  color: #ffffff;
 }
 
 /* Command Palette Dialog */

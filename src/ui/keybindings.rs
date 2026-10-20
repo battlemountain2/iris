@@ -15,6 +15,8 @@ pub struct KeybindingActions {
     pub on_trash: Rc<dyn Fn()>,
     pub on_reply: Rc<dyn Fn()>,
     pub on_star: Rc<dyn Fn()>,
+    pub on_toggle_read: Rc<dyn Fn()>,
+    pub on_focus_search: Rc<dyn Fn()>,
 }
 
 pub fn setup_window_keybindings(
@@ -86,9 +88,14 @@ pub fn setup_window_keybindings(
                 (actions_clone.on_star)();
                 glib::Propagation::Stop
             }
-            // '/' -> Search
+            // 'u' -> Toggle Read/Unread
+            Key::u => {
+                (actions_clone.on_toggle_read)();
+                glib::Propagation::Stop
+            }
+            // '/' -> Focus thread search
             Key::slash => {
-                palette_clone.present(&win);
+                (actions_clone.on_focus_search)();
                 glib::Propagation::Stop
             }
             _ => glib::Propagation::Proceed,

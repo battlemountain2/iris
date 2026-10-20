@@ -55,8 +55,8 @@ fn build_ui(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Iris (Ctrl+K for Command Palette)")
-        .default_width(1200)
-        .default_height(740)
+        .default_width(1280)
+        .default_height(750)
         .build();
 
     println!("✉️  Iris Mail v0.1.0 initialized — Ctrl+K = Command Palette, c = Compose, j/k = Navigate, e = Archive, # = Trash");
@@ -80,8 +80,8 @@ fn build_ui(app: &adw::Application) {
 
     // Outer split view (Sidebar -> Content)
     let outer_split = adw::NavigationSplitView::new();
-    outer_split.set_min_sidebar_width(200.0);
-    outer_split.set_max_sidebar_width(250.0);
+    outer_split.set_min_sidebar_width(180.0);
+    outer_split.set_max_sidebar_width(240.0);
 
     let sidebar_view = Rc::new(ui::SidebarView::new());
     let sidebar_page = adw::NavigationPage::builder()
@@ -93,8 +93,8 @@ fn build_ui(app: &adw::Application) {
 
     // Inner split view (Thread List -> Reading Pane)
     let inner_split = adw::NavigationSplitView::new();
-    inner_split.set_min_sidebar_width(280.0);
-    inner_split.set_max_sidebar_width(380.0);
+    inner_split.set_min_sidebar_width(260.0);
+    inner_split.set_max_sidebar_width(340.0);
 
     let thread_view = Rc::new(ui::ThreadListView::new());
 
@@ -365,10 +365,36 @@ fn build_ui(app: &adw::Application) {
 
     let do_star = {
         let reading_view = reading_view.clone();
+        let refresh_view = refresh_view.clone();
         Rc::new(move || {
-            if let Some(thread) = reading_view.current_thread.borrow().as_ref() {
-                tracing::info!("Toggled star/flag on thread: '{}'", thread.subject);
+            let thread_opt = reading_view.current_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                if let Ok(new_flag) = services::maildir::toggle_thread_flag(&thread) {
+                    tracing::info!("Thread flag toggled: is_flagged={new_flag}");
+                    refresh_view();
+                }
             }
+        })
+    };
+
+    let do_toggle_read = {
+        let reading_view = reading_view.clone();
+        let refresh_view = refresh_view.clone();
+        Rc::new(move || {
+            let thread_opt = reading_view.current_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                if let Ok(new_unread) = services::maildir::toggle_thread_read(&thread) {
+                    tracing::info!("Thread unread toggled: is_unread={new_unread}");
+                    refresh_view();
+                }
+            }
+        })
+    };
+
+    let do_focus_search = {
+        let thread_view = thread_view.clone();
+        Rc::new(move || {
+            thread_view.search_entry.grab_focus();
         })
     };
 
@@ -395,6 +421,34 @@ fn build_ui(app: &adw::Application) {
         let do_star = do_star.clone();
         reading_view.star_btn.connect_clicked(move |_| {
             do_star();
+        });
+    }
+
+    // Connect Privacy Banner Action Buttons
+    {
+        let rv = reading_view.clone();
+        reading_view.load_images_btn.connect_clicked(move |_| {
+            rv.allow_remote_images.set(true);
+            if let Some(thread) = rv.current_thread.borrow().as_ref() {
+                rv.display_thread(thread);
+            }
+        });
+    }
+    {
+        let rv = reading_view.clone();
+        reading_view.always_load_btn.connect_clicked(move |_| {
+            rv.allow_remote_images.set(true);
+            if let Some(thread) = rv.current_thread.borrow().as_ref() {
+                rv.display_thread(thread);
+            }
+        });
+    }
+
+    // Connect Live Filter in Thread List
+    {
+        let tv_filter = thread_view.clone();
+        thread_view.search_entry.connect_search_changed(move |entry| {
+            tv_filter.apply_filter(&entry.text());
         });
     }
 
@@ -425,16 +479,18 @@ fn build_ui(app: &adw::Application) {
 
     let palette_ref = palette.clone();
     let win_for_palette = window.clone();
-    thread_view.search_button.connect_clicked(move |_| {
+    thread_view.palette_btn.connect_clicked(move |_| {
         palette_ref.present(&win_for_palette);
     });
 
-    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, s, /)
+    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, s, u, /)
     let key_actions = ui::KeybindingActions {
         on_archive: do_archive,
         on_trash: do_trash,
         on_reply: do_reply,
         on_star: do_star,
+        on_toggle_read: do_toggle_read,
+        on_focus_search: do_focus_search,
     };
 
     ui::setup_window_keybindings(

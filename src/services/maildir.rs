@@ -130,6 +130,25 @@ impl MaildirScanner {
                 \r\n\
                 Your monthly receipt for 2TB iCloud+ storage is now available for download. Total: $9.99.\r\n";
             fs::write(inbox_new.join("1792464002.3.mail:2,S"), email3)?;
+
+            // Email 4 (Rich HTML with Remote Tracking Image & Links)
+            let email4 = "From: GitHub Highlights <notifications@github.com>\r\n\
+                To: Brayan <bry@omarchy.org>\r\n\
+                Subject: [Iris & Hermes] Weekly Community Highlights\r\n\
+                Date: Mon, 19 Oct 2026 15:30:00 -0600\r\n\
+                Message-ID: <highlights-oct2026@github.com>\r\n\
+                Content-Type: text/html; charset=utf-8\r\n\
+                \r\n\
+                <h2>Weekly Community Highlights</h2>\r\n\
+                <p>Hey <b>Brayan</b>,</p>\r\n\
+                <p>Iris now features <b>liquid-glass translucency</b> for Hyprland, rich HTML email rendering, and full <b>Mail Privacy Protection</b>.</p>\r\n\
+                <ul>\r\n\
+                  <li>Explore the repo: <a href=\"https://github.com/battlemountain2/iris\">battlemountain2/iris on GitHub</a></li>\r\n\
+                  <li>Sister client: <a href=\"https://github.com/battlemountain2/hermes\">battlemountain2/hermes</a></li>\r\n\
+                </ul>\r\n\
+                <blockquote>\"Fast, liquid-glass, keyboard-driven Linux email client designed for Arch Linux & Hyprland.\"</blockquote>\r\n\
+                <p>Tracking pixel beacon: <img src=\"https://github.com/images/beacon-pixel.png\" alt=\"Telemetry Beacon\" /></p>\r\n";
+            fs::write(inbox_new.join("1792464003.4.mail:2,"), email4)?;
         }
 
         // Seed Archive if empty
@@ -325,6 +344,120 @@ pub fn restore_moved_files(moves: &[(PathBuf, PathBuf)]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Helper to update Maildir flags encoded after `:2,` in a filename.
+pub fn update_maildir_flags(
+    filename: &str,
+    add_flag: Option<char>,
+    remove_flag: Option<char>,
+) -> String {
+    let parts: Vec<&str> = filename.split(":2,").collect();
+    let base = parts[0];
+    let mut flags: Vec<char> = if parts.len() > 1 {
+        parts[1].chars().collect()
+    } else {
+        Vec::new()
+    };
+
+    if let Some(rf) = remove_flag {
+        flags.retain(|&c| c != rf);
+    }
+
+    if let Some(af) = add_flag {
+        if !flags.contains(&af) {
+            flags.push(af);
+        }
+    }
+
+    flags.sort_unstable();
+    let flags_str: String = flags.into_iter().collect();
+    format!("{base}:2,{flags_str}")
+}
+
+/// Toggles read status for all messages in a thread on disk.
+/// If thread is unread, marks as read (adds 'S', moves from `new/` to `cur/`).
+/// If thread is read, marks as unread (removes 'S').
+/// Returns the new `is_unread` state.
+pub fn toggle_thread_read(thread: &Thread) -> Result<bool, String> {
+    let target_unread = !thread.is_unread;
+
+    for msg in &thread.messages {
+        if let Some(ref path_str) = msg.file_path {
+            let path = PathBuf::from(path_str);
+            if !path.exists() {
+                continue;
+            }
+
+            let file_name = path
+                .file_name()
+                .ok_or_else(|| "Invalid file name".to_string())?
+                .to_string_lossy();
+
+            let new_name = if target_unread {
+                update_maildir_flags(&file_name, None, Some('S'))
+            } else {
+                update_maildir_flags(&file_name, Some('S'), None)
+            };
+
+            let parent = path.parent().unwrap_or(Path::new(""));
+            let parent_str = parent.to_string_lossy();
+            let dest_path = if !target_unread && parent_str.ends_with("new") {
+                if let Some(grandparent) = parent.parent() {
+                    let cur_dir = grandparent.join("cur");
+                    let _ = fs::create_dir_all(&cur_dir);
+                    cur_dir.join(&new_name)
+                } else {
+                    parent.join(&new_name)
+                }
+            } else {
+                parent.join(&new_name)
+            };
+
+            if path != dest_path {
+                fs::rename(&path, &dest_path)
+                    .map_err(|e| format!("Failed to update read flag: {e}"))?;
+            }
+        }
+    }
+
+    Ok(target_unread)
+}
+
+/// Toggles star/flagged status for all messages in a thread on disk.
+/// Returns the new `is_flagged` state.
+pub fn toggle_thread_flag(thread: &Thread) -> Result<bool, String> {
+    let target_flagged = !thread.is_flagged;
+
+    for msg in &thread.messages {
+        if let Some(ref path_str) = msg.file_path {
+            let path = PathBuf::from(path_str);
+            if !path.exists() {
+                continue;
+            }
+
+            let file_name = path
+                .file_name()
+                .ok_or_else(|| "Invalid file name".to_string())?
+                .to_string_lossy();
+
+            let new_name = if target_flagged {
+                update_maildir_flags(&file_name, Some('F'), None)
+            } else {
+                update_maildir_flags(&file_name, None, Some('F'))
+            };
+
+            let parent = path.parent().unwrap_or(Path::new(""));
+            let dest_path = parent.join(&new_name);
+
+            if path != dest_path {
+                fs::rename(&path, &dest_path)
+                    .map_err(|e| format!("Failed to update flag: {e}"))?;
+            }
+        }
+    }
+
+    Ok(target_flagged)
 }
 
 fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) -> Option<Message> {
@@ -572,5 +705,13 @@ mod tests {
         assert!(!archived_file.exists());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_update_maildir_flags() {
+        assert_eq!(update_maildir_flags("msg1:2,", Some('S'), None), "msg1:2,S");
+        assert_eq!(update_maildir_flags("msg1:2,S", Some('F'), None), "msg1:2,FS");
+        assert_eq!(update_maildir_flags("msg1:2,FS", None, Some('S')), "msg1:2,F");
+        assert_eq!(update_maildir_flags("msg1:2,F", None, Some('F')), "msg1:2,");
     }
 }
