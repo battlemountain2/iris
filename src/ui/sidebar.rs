@@ -2,11 +2,15 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use adw::prelude::*;
 
 pub struct SidebarView {
     pub container: gtk::Box,
     pub list_box: gtk::ListBox,
+    pub badges: RefCell<HashMap<String, gtk::Label>>,
+    pub rows: RefCell<HashMap<String, gtk::ListBoxRow>>,
 }
 
 impl SidebarView {
@@ -44,7 +48,9 @@ impl SidebarView {
             .build();
         list_box.add_css_class("navigation-sidebar");
 
-        populate_default_mailboxes(&list_box);
+        let mut badges_map = HashMap::new();
+        let mut rows_map = HashMap::new();
+        populate_default_mailboxes(&list_box, &mut badges_map, &mut rows_map);
 
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
@@ -52,11 +58,46 @@ impl SidebarView {
         Self {
             container,
             list_box,
+            badges: RefCell::new(badges_map),
+            rows: RefCell::new(rows_map),
+        }
+    }
+
+    /// Updates the numeric badge count for a specific mailbox/folder.
+    pub fn update_badge(&self, folder_id: &str, count: u32) {
+        if let Some(badge) = self.badges.borrow().get(folder_id) {
+            if count > 0 {
+                badge.set_text(&count.to_string());
+                badge.set_visible(true);
+            } else {
+                badge.set_visible(false);
+            }
+        }
+    }
+
+    /// Selects a mailbox row programmatically.
+    pub fn select_folder(&self, folder_id: &str) {
+        if let Some(row) = self.rows.borrow().get(folder_id) {
+            self.list_box.select_row(Some(row));
+        }
+    }
+
+    /// Returns the folder ID associated with a clicked row.
+    pub fn get_row_id(&self, row: &gtk::ListBoxRow) -> Option<String> {
+        let name = row.widget_name().to_string();
+        if name.is_empty() {
+            None
+        } else {
+            Some(name)
         }
     }
 }
 
-fn populate_default_mailboxes(list_box: &gtk::ListBox) {
+fn populate_default_mailboxes(
+    list_box: &gtk::ListBox,
+    badges: &mut HashMap<String, gtk::Label>,
+    rows: &mut HashMap<String, gtk::ListBoxRow>,
+) {
     // Section 1: Inboxes
     let inboxes_label = gtk::Label::builder()
         .label("INBOXES")
@@ -67,12 +108,17 @@ fn populate_default_mailboxes(list_box: &gtk::ListBox) {
         .build();
     inboxes_label.add_css_class("dim-label");
     inboxes_label.add_css_class("caption");
-    list_box.append(&inboxes_label);
 
-    list_box.append(&create_mailbox_row("All Inboxes", "mail-folder-inbox-symbolic", Some(14)));
-    list_box.append(&create_mailbox_row("Gmail (Personal)", "mail-inbox-symbolic", Some(5)));
-    list_box.append(&create_mailbox_row("Gmail (Work)", "mail-inbox-symbolic", Some(8)));
-    list_box.append(&create_mailbox_row("iCloud", "mail-inbox-symbolic", Some(1)));
+    let header_row1 = gtk::ListBoxRow::new();
+    header_row1.set_selectable(false);
+    header_row1.set_activatable(false);
+    header_row1.set_child(Some(&inboxes_label));
+    list_box.append(&header_row1);
+
+    add_row(list_box, badges, rows, "inbox", "All Inboxes", "mail-folder-inbox-symbolic", Some(3));
+    add_row(list_box, badges, rows, "account:demo", "Gmail (Personal)", "mail-inbox-symbolic", Some(2));
+    add_row(list_box, badges, rows, "account:work", "Gmail (Work)", "mail-inbox-symbolic", None);
+    add_row(list_box, badges, rows, "account:icloud", "iCloud", "mail-inbox-symbolic", Some(1));
 
     // Section 2: Smart Views
     let views_label = gtk::Label::builder()
@@ -84,17 +130,32 @@ fn populate_default_mailboxes(list_box: &gtk::ListBox) {
         .build();
     views_label.add_css_class("dim-label");
     views_label.add_css_class("caption");
-    list_box.append(&views_label);
 
-    list_box.append(&create_mailbox_row("Feed & Newsletters", "newspaper-symbolic", Some(23)));
-    list_box.append(&create_mailbox_row("Flagged", "starred-symbolic", None));
-    list_box.append(&create_mailbox_row("Sent", "mail-sent-symbolic", None));
-    list_box.append(&create_mailbox_row("Archive", "mail-archive-symbolic", None));
-    list_box.append(&create_mailbox_row("Trash", "user-trash-symbolic", None));
+    let header_row2 = gtk::ListBoxRow::new();
+    header_row2.set_selectable(false);
+    header_row2.set_activatable(false);
+    header_row2.set_child(Some(&views_label));
+    list_box.append(&header_row2);
+
+    add_row(list_box, badges, rows, "view:feed", "Feed & Newsletters", "newspaper-symbolic", None);
+    add_row(list_box, badges, rows, "view:flagged", "Flagged", "starred-symbolic", None);
+    add_row(list_box, badges, rows, "folder:sent", "Sent", "mail-sent-symbolic", None);
+    add_row(list_box, badges, rows, "folder:archive", "Archive", "mail-archive-symbolic", None);
+    add_row(list_box, badges, rows, "folder:trash", "Trash", "user-trash-symbolic", None);
 }
 
-fn create_mailbox_row(title: &str, icon_name: &str, unread: Option<u32>) -> gtk::ListBoxRow {
+fn add_row(
+    list_box: &gtk::ListBox,
+    badges: &mut HashMap<String, gtk::Label>,
+    rows: &mut HashMap<String, gtk::ListBoxRow>,
+    id: &str,
+    title: &str,
+    icon_name: &str,
+    unread: Option<u32>,
+) {
     let row = gtk::ListBoxRow::new();
+    row.set_widget_name(id);
+
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     hbox.set_margin_start(12);
     hbox.set_margin_end(12);
@@ -112,15 +173,17 @@ fn create_mailbox_row(title: &str, icon_name: &str, unread: Option<u32>) -> gtk:
         .build();
     hbox.append(&label);
 
-    if let Some(count) = unread {
-        let badge = gtk::Label::builder()
-            .label(count.to_string())
-            .build();
-        badge.add_css_class("badge");
-        badge.add_css_class("numeric");
-        hbox.append(&badge);
-    }
+    let badge = gtk::Label::builder()
+        .label(unread.map(|c| c.to_string()).unwrap_or_default())
+        .visible(unread.is_some_and(|c| c > 0))
+        .build();
+    badge.add_css_class("badge");
+    badge.add_css_class("numeric");
+    hbox.append(&badge);
+
+    badges.insert(id.to_string(), badge);
+    rows.insert(id.to_string(), row.clone());
 
     row.set_child(Some(&hbox));
-    row
+    list_box.append(&row);
 }

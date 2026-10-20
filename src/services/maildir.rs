@@ -73,12 +73,22 @@ impl MaildirScanner {
 
     /// Automatically seeds demo maildir emails if the directory is empty.
     pub fn ensure_demo_data(&self) -> std::io::Result<()> {
-        let inbox_new = self.root_path.join("demo").join("INBOX").join("new");
-        if !inbox_new.exists() {
-            fs::create_dir_all(&inbox_new)?;
-            fs::create_dir_all(self.root_path.join("demo").join("INBOX").join("cur"))?;
-            fs::create_dir_all(self.root_path.join("demo").join("INBOX").join("tmp"))?;
+        let demo_root = self.root_path.join("demo");
+        ensure_maildir_folder(&demo_root.join("INBOX"))?;
+        ensure_maildir_folder(&demo_root.join("Archive"))?;
+        ensure_maildir_folder(&demo_root.join("Trash"))?;
+        ensure_maildir_folder(&demo_root.join("Sent"))?;
 
+        let inbox_new = demo_root.join("INBOX").join("new");
+        let inbox_cur = demo_root.join("INBOX").join("cur");
+        let archive_cur = demo_root.join("Archive").join("cur");
+        let sent_cur = demo_root.join("Sent").join("cur");
+
+        // Seed Inbox if empty
+        let inbox_empty = fs::read_dir(&inbox_new).map(|mut d| d.next().is_none()).unwrap_or(true)
+            && fs::read_dir(&inbox_cur).map(|mut d| d.next().is_none()).unwrap_or(true);
+
+        if inbox_empty {
             // Email 1
             let email1 = "From: Alex Rivera <alex@hermes.dev>\r\n\
                 To: Brayan <bry@omarchy.org>\r\n\
@@ -121,8 +131,200 @@ impl MaildirScanner {
                 Your monthly receipt for 2TB iCloud+ storage is now available for download. Total: $9.99.\r\n";
             fs::write(inbox_new.join("1792464002.3.mail:2,S"), email3)?;
         }
+
+        // Seed Archive if empty
+        let archive_empty = fs::read_dir(&archive_cur).map(|mut d| d.next().is_none()).unwrap_or(true);
+        if archive_empty {
+            let email_arch = "From: Iris Design <design@iris.local>\r\n\
+                To: Brayan <bry@omarchy.org>\r\n\
+                Subject: Welcome to Iris — Liquid Glass Mail\r\n\
+                Date: Sat, 17 Oct 2026 14:10:00 -0600\r\n\
+                Message-ID: <iris-welcome-1@iris.local>\r\n\
+                Content-Type: text/plain; charset=utf-8\r\n\
+                \r\n\
+                Welcome to Iris!\r\n\
+                \r\n\
+                Iris is designed to be the fastest, most beautiful keyboard-driven mail client for Linux & Hyprland. \
+                Featuring dual-kawase translucent sidebar blur, Vim modal navigation (j/k/e/#/c), and seamless \
+                integration with Hermes.\r\n";
+            fs::write(archive_cur.join("1792460000.arch.mail:2,S"), email_arch)?;
+        }
+
+        // Seed Sent if empty
+        let sent_empty = fs::read_dir(&sent_cur).map(|mut d| d.next().is_none()).unwrap_or(true);
+        if sent_empty {
+            let email_sent = "From: Brayan <bry@omarchy.org>\r\n\
+                To: Alex Rivera <alex@hermes.dev>\r\n\
+                Subject: Re: Hermes v0.4.0 Release & Audio Overhaul\r\n\
+                Date: Mon, 19 Oct 2026 11:05:00 -0600\r\n\
+                Message-ID: <reply-hermes-040@omarchy.org>\r\n\
+                Content-Type: text/plain; charset=utf-8\r\n\
+                \r\n\
+                Alex,\r\n\
+                \r\n\
+                The 32-band Goertzel filter bank sounds incredible. I'm adding full attachment integration in Iris \
+                so music files can be sent straight to Hermes playlists.\r\n\
+                \r\n\
+                Best,\r\nBrayan\r\n";
+            fs::write(sent_cur.join("1792465000.sent.mail:2,S"), email_sent)?;
+        }
+
         Ok(())
     }
+
+    /// Quickly counts unread messages in a maildir folder without parsing bodies.
+    pub fn count_unread_in_folder(&self, folder_path: &Path) -> u32 {
+        let mut count = 0;
+        for subdir in &["new", "cur"] {
+            let dir = folder_path.join(subdir);
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    if let Ok(ft) = entry.file_type() {
+                        if ft.is_file() {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            if *subdir == "new" || !name.contains(":2,") || !name.contains('S') {
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        count
+    }
+
+    /// Counts total messages in a maildir folder.
+    pub fn count_total_in_folder(&self, folder_path: &Path) -> u32 {
+        let mut count = 0;
+        for subdir in &["new", "cur"] {
+            let dir = folder_path.join(subdir);
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    if let Ok(ft) = entry.file_type() {
+                        if ft.is_file() {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        count
+    }
+}
+
+/// Ensures the standard maildir subdirectories exist.
+pub fn ensure_maildir_folder(folder_path: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(folder_path.join("cur"))?;
+    fs::create_dir_all(folder_path.join("new"))?;
+    fs::create_dir_all(folder_path.join("tmp"))?;
+    Ok(())
+}
+
+/// Moves a message file to the target maildir folder (into its `cur` directory).
+/// Returns `(original_path, destination_path)` on success.
+pub fn move_message_to_folder(
+    file_path: &Path,
+    target_folder: &Path,
+) -> Result<(PathBuf, PathBuf), String> {
+    if !file_path.exists() {
+        return Err(format!("Source message file does not exist: {}", file_path.display()));
+    }
+
+    let cur_dir = target_folder.join("cur");
+    if !cur_dir.exists() {
+        fs::create_dir_all(&cur_dir)
+            .map_err(|e| format!("Failed to create folder {}: {e}", cur_dir.display()))?;
+    }
+
+    let file_name = file_path
+        .file_name()
+        .ok_or_else(|| "Invalid file name".to_string())?;
+
+    let dest_path = cur_dir.join(file_name);
+    if file_path == dest_path {
+        return Ok((file_path.to_path_buf(), dest_path));
+    }
+
+    fs::rename(file_path, &dest_path).map_err(|e| {
+        format!(
+            "Failed to move {} to {}: {e}",
+            file_path.display(),
+            dest_path.display()
+        )
+    })?;
+
+    Ok((file_path.to_path_buf(), dest_path))
+}
+
+/// Moves all messages in a thread to the `Archive` folder of the account.
+/// Returns a list of `(source_path, dest_path)` pairs that can be reverted by `restore_moved_files`.
+pub fn archive_thread(
+    thread: &Thread,
+    account_root: &Path,
+) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let archive_folder = account_root.join("Archive");
+    let mut moves = Vec::new();
+
+    for msg in &thread.messages {
+        if let Some(ref path_str) = msg.file_path {
+            let src = PathBuf::from(path_str);
+            match move_message_to_folder(&src, &archive_folder) {
+                Ok(moved) => moves.push(moved),
+                Err(err) => {
+                    let _ = restore_moved_files(&moves);
+                    return Err(format!("Archive error: {err}"));
+                }
+            }
+        }
+    }
+
+    Ok(moves)
+}
+
+/// Moves all messages in a thread to the `Trash` folder of the account.
+/// Returns a list of `(source_path, dest_path)` pairs that can be reverted by `restore_moved_files`.
+pub fn trash_thread(
+    thread: &Thread,
+    account_root: &Path,
+) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let trash_folder = account_root.join("Trash");
+    let mut moves = Vec::new();
+
+    for msg in &thread.messages {
+        if let Some(ref path_str) = msg.file_path {
+            let src = PathBuf::from(path_str);
+            match move_message_to_folder(&src, &trash_folder) {
+                Ok(moved) => moves.push(moved),
+                Err(err) => {
+                    let _ = restore_moved_files(&moves);
+                    return Err(format!("Trash error: {err}"));
+                }
+            }
+        }
+    }
+
+    Ok(moves)
+}
+
+/// Reverses a set of file moves (e.g. for the 10-second Undo action).
+pub fn restore_moved_files(moves: &[(PathBuf, PathBuf)]) -> Result<(), String> {
+    for (original_path, current_path) in moves {
+        if current_path.exists() {
+            if let Some(parent) = original_path.parent() {
+                if !parent.exists() {
+                    let _ = fs::create_dir_all(parent);
+                }
+            }
+            fs::rename(current_path, original_path).map_err(|e| {
+                format!(
+                    "Failed to restore {} to {}: {e}",
+                    current_path.display(),
+                    original_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) -> Option<Message> {
@@ -205,6 +407,7 @@ fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) ->
         attachments,
         is_unread,
         is_flagged,
+        file_path: Some(path.to_string_lossy().to_string()),
     })
 }
 
@@ -310,5 +513,64 @@ mod tests {
         assert_eq!(msg.body_plain.as_deref(), Some("Test email body content."));
         assert!(msg.is_unread);
         assert!(!msg.is_flagged);
+    }
+
+    #[test]
+    fn test_archive_and_restore_thread() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_test_{}", std::process::id()));
+        let account_root = temp_dir.join("test_account");
+        let inbox_cur = account_root.join("INBOX").join("cur");
+        let archive_cur = account_root.join("Archive").join("cur");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&inbox_cur).unwrap();
+        fs::create_dir_all(&archive_cur).unwrap();
+
+        let mail_file = inbox_cur.join("100.mail:2,S");
+        fs::write(&mail_file, b"From: test@iris.local\r\nSubject: Test\r\n\r\nHello").unwrap();
+
+        let msg = Message {
+            id: "msg-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            from: "test@iris.local".to_string(),
+            to: vec!["me@iris.local".to_string()],
+            cc: vec![],
+            date: Utc::now(),
+            subject: "Test".to_string(),
+            body_plain: Some("Hello".to_string()),
+            body_html: None,
+            has_remote_images: false,
+            attachments: vec![],
+            is_unread: false,
+            is_flagged: false,
+            file_path: Some(mail_file.to_string_lossy().to_string()),
+        };
+
+        let thread = Thread {
+            id: "thread-1".to_string(),
+            subject: "Test".to_string(),
+            snippet: "Hello".to_string(),
+            senders: vec!["test@iris.local".to_string()],
+            latest_timestamp: Utc::now(),
+            message_count: 1,
+            is_unread: false,
+            is_flagged: false,
+            tags: vec![],
+            messages: vec![msg],
+        };
+
+        // Archive thread
+        let moves = archive_thread(&thread, &account_root).expect("archive success");
+        assert_eq!(moves.len(), 1);
+        assert!(!mail_file.exists());
+        let archived_file = archive_cur.join("100.mail:2,S");
+        assert!(archived_file.exists());
+
+        // Restore thread (Undo action)
+        restore_moved_files(&moves).expect("restore success");
+        assert!(mail_file.exists());
+        assert!(!archived_file.exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

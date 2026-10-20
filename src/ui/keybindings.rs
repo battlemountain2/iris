@@ -9,15 +9,26 @@ use gtk::gdk::Key;
 use crate::ui::command_palette::CommandPalette;
 use crate::ui::compose::ComposeDialog;
 
+#[derive(Clone)]
+pub struct KeybindingActions {
+    pub on_archive: Rc<dyn Fn()>,
+    pub on_trash: Rc<dyn Fn()>,
+    pub on_reply: Rc<dyn Fn()>,
+    pub on_star: Rc<dyn Fn()>,
+}
+
 pub fn setup_window_keybindings(
     window: &adw::ApplicationWindow,
     palette: Rc<CommandPalette>,
     compose: Rc<ComposeDialog>,
     thread_list_box: gtk::ListBox,
+    actions: KeybindingActions,
 ) {
     let controller = gtk::EventControllerKey::new();
 
     let win_weak = window.downgrade();
+    let actions_clone = actions.clone();
+    let palette_clone = palette.clone();
     controller.connect_key_pressed(move |_ctrl, key, _code, modifier| {
         let Some(win) = win_weak.upgrade() else {
             return glib::Propagation::Proceed;
@@ -30,7 +41,7 @@ pub fn setup_window_keybindings(
 
         // Ctrl+K: Command Palette
         if modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) && key == Key::k {
-            palette.present(&win);
+            palette_clone.present(&win);
             return glib::Propagation::Stop;
         }
 
@@ -53,6 +64,31 @@ pub fn setup_window_keybindings(
             // 'k' or Up -> Previous thread
             Key::k | Key::Up => {
                 navigate_list(&thread_list_box, -1);
+                glib::Propagation::Stop
+            }
+            // 'e' -> Archive thread
+            Key::e => {
+                (actions_clone.on_archive)();
+                glib::Propagation::Stop
+            }
+            // '#' or Delete -> Trash thread
+            Key::numbersign | Key::Delete => {
+                (actions_clone.on_trash)();
+                glib::Propagation::Stop
+            }
+            // 'r' -> Reply
+            Key::r => {
+                (actions_clone.on_reply)();
+                glib::Propagation::Stop
+            }
+            // 's' -> Star
+            Key::s => {
+                (actions_clone.on_star)();
+                glib::Propagation::Stop
+            }
+            // '/' -> Search
+            Key::slash => {
+                palette_clone.present(&win);
                 glib::Propagation::Stop
             }
             _ => glib::Propagation::Proceed,

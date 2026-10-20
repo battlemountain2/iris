@@ -12,6 +12,7 @@ pub struct CommandPalette {
     entry: gtk::SearchEntry,
     list_box: gtk::ListBox,
     theme_manager: Rc<ThemeManager>,
+    on_action: Rc<dyn Fn(&str)>,
 }
 
 #[derive(Clone)]
@@ -123,6 +124,13 @@ const ACTIONS: &[PaletteAction] = &[
 
 impl CommandPalette {
     pub fn new(theme_manager: Rc<ThemeManager>) -> Self {
+        Self::with_action_handler(theme_manager, |_| {})
+    }
+
+    pub fn with_action_handler<F>(theme_manager: Rc<ThemeManager>, on_action: F) -> Self
+    where
+        F: Fn(&str) + 'static,
+    {
         let dialog = adw::Dialog::builder()
             .title("Command Palette")
             .content_width(560)
@@ -151,14 +159,16 @@ impl CommandPalette {
             .build();
         list_box.add_css_class("boxed-list");
 
-        populate_actions(&list_box, "", &theme_manager, &dialog);
+        let action_rc: Rc<dyn Fn(&str)> = Rc::new(on_action);
+        populate_actions(&list_box, "", &theme_manager, &action_rc, &dialog);
 
         let list_box_clone = list_box.clone();
         let tm_clone = theme_manager.clone();
+        let act_clone = action_rc.clone();
         let dialog_clone = dialog.clone();
         entry.connect_search_changed(move |e| {
             let query = e.text().to_string();
-            populate_actions(&list_box_clone, &query, &tm_clone, &dialog_clone);
+            populate_actions(&list_box_clone, &query, &tm_clone, &act_clone, &dialog_clone);
         });
 
         scrolled.set_child(Some(&list_box));
@@ -171,6 +181,7 @@ impl CommandPalette {
             entry,
             list_box,
             theme_manager,
+            on_action: action_rc,
         }
     }
 
@@ -185,6 +196,7 @@ fn populate_actions(
     list_box: &gtk::ListBox,
     query: &str,
     theme_manager: &Rc<ThemeManager>,
+    on_action: &Rc<dyn Fn(&str)>,
     dialog: &adw::Dialog,
 ) {
     while let Some(child) = list_box.first_child() {
@@ -236,9 +248,10 @@ fn populate_actions(
 
         let id = action.id;
         let tm = theme_manager.clone();
+        let act = on_action.clone();
         let diag = dialog.clone();
         row.connect_activate(move |_| {
-            execute_action(id, &tm);
+            execute_action(id, &tm, &act);
             diag.close();
         });
 
@@ -246,7 +259,11 @@ fn populate_actions(
     }
 }
 
-fn execute_action(id: &str, theme_manager: &Rc<ThemeManager>) {
+fn execute_action(
+    id: &str,
+    theme_manager: &Rc<ThemeManager>,
+    on_action: &Rc<dyn Fn(&str)>,
+) {
     match id {
         "theme_attic_olive" => theme_manager.set_theme("attic-olive"),
         "theme_corinthian_bronze" => theme_manager.set_theme("corinthian-bronze"),
@@ -258,14 +275,8 @@ fn execute_action(id: &str, theme_manager: &Rc<ThemeManager>) {
             let current = *theme_manager.subtle_mode.borrow();
             theme_manager.set_subtle_mode(!current);
         }
-        "compose" => {
-            tracing::info!("Triggered Compose from Command Palette");
-        }
-        "sync" => {
-            tracing::info!("Triggered Sync from Command Palette");
-        }
-        other => {
-            tracing::info!("Executed palette action: {}", other);
+        action => {
+            (on_action)(action);
         }
     }
 }

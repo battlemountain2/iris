@@ -9,6 +9,10 @@ use crate::model::Thread;
 
 pub struct ReadingPaneView {
     pub container: gtk::Box,
+    pub archive_btn: gtk::Button,
+    pub trash_btn: gtk::Button,
+    pub reply_btn: gtk::Button,
+    pub star_btn: gtk::Button,
     pub subject_label: gtk::Label,
     pub avatar: adw::Avatar,
     pub name_label: gtk::Label,
@@ -116,6 +120,10 @@ impl ReadingPaneView {
 
         Self {
             container,
+            archive_btn,
+            trash_btn,
+            reply_btn,
+            star_btn,
             subject_label,
             avatar,
             name_label,
@@ -126,6 +134,26 @@ impl ReadingPaneView {
             timeline_strip,
             attachment_box,
             current_thread: RefCell::new(None),
+        }
+    }
+
+    /// Resets the reading pane to an empty placeholder state when no thread is selected.
+    pub fn clear(&self) {
+        *self.current_thread.borrow_mut() = None;
+        self.subject_label.set_text("No conversation selected");
+        self.avatar.set_text(None);
+        self.name_label.set_text("");
+        self.email_label.set_text("");
+        self.date_label.set_text("");
+        self.body_label.set_text("");
+        self.privacy_banner.set_visible(false);
+        self.timeline_strip.set_visible(false);
+        self.attachment_box.set_visible(false);
+        while let Some(child) = self.timeline_strip.first_child() {
+            self.timeline_strip.remove(&child);
+        }
+        while let Some(child) = self.attachment_box.first_child() {
+            self.attachment_box.remove(&child);
         }
     }
 

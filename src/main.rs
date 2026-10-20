@@ -4,6 +4,7 @@ mod model;
 mod services;
 mod ui;
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use adw::prelude::*;
@@ -54,11 +55,11 @@ fn build_ui(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Iris (Ctrl+K for Command Palette)")
-        .default_width(1060)
-        .default_height(720)
+        .default_width(1200)
+        .default_height(740)
         .build();
 
-    println!("✉️  Iris Mail v0.1.0 initialized — Ctrl+K = Command Palette, c = Compose, j/k = Navigate");
+    println!("✉️  Iris Mail v0.1.0 initialized — Ctrl+K = Command Palette, c = Compose, j/k = Navigate, e = Archive, # = Trash");
 
     window.add_css_class("iris-window");
 
@@ -67,10 +68,14 @@ fn build_ui(app: &adw::Application) {
 
     // Initialize Maildir Scanner & Seed Demo Emails if directory is empty
     let mail_root = get_mail_root();
-    let scanner = services::MaildirScanner::new(mail_root.clone());
+    let scanner = Rc::new(services::MaildirScanner::new(mail_root.clone()));
     let _ = scanner.ensure_demo_data();
 
-    // Toast Overlay for 10-Second Undo Send
+    let demo_account = mail_root.join("demo");
+    let current_folder = Rc::new(RefCell::new(demo_account.join("INBOX")));
+    let current_title = Rc::new(RefCell::new("Inbox".to_string()));
+
+    // Toast Overlay for 10-Second Undo Actions & Undo Send
     let toast_overlay = adw::ToastOverlay::new();
 
     // Outer split view (Sidebar -> Content)
@@ -78,7 +83,7 @@ fn build_ui(app: &adw::Application) {
     outer_split.set_min_sidebar_width(200.0);
     outer_split.set_max_sidebar_width(250.0);
 
-    let sidebar_view = ui::SidebarView::new();
+    let sidebar_view = Rc::new(ui::SidebarView::new());
     let sidebar_page = adw::NavigationPage::builder()
         .title("Mailboxes")
         .tag("sidebar")
@@ -91,7 +96,7 @@ fn build_ui(app: &adw::Application) {
     inner_split.set_min_sidebar_width(280.0);
     inner_split.set_max_sidebar_width(380.0);
 
-    let thread_view = ui::ThreadListView::new();
+    let thread_view = Rc::new(ui::ThreadListView::new());
 
     // Hook up sidebar toggle button to outer split view
     let outer_split_ref = outer_split.clone();
@@ -100,17 +105,7 @@ fn build_ui(app: &adw::Application) {
         outer_split_ref.set_collapsed(!is_collapsed);
     });
 
-    // Scan threads from demo/INBOX
-    let demo_inbox = mail_root.join("demo").join("INBOX");
-    let threads = scanner.scan_folder(&demo_inbox);
-    thread_view.set_threads(&threads);
-
     let reading_view = Rc::new(ui::ReadingPaneView::new());
-
-    // Display the first thread on launch
-    if let Some(first) = threads.first() {
-        reading_view.display_thread(first);
-    }
 
     // Connect dynamic selection: clicking or j/k immediately updates the reading view
     let threads_store = thread_view.threads.clone();
@@ -124,11 +119,6 @@ fn build_ui(app: &adw::Application) {
             }
         }
     });
-
-    // Select the first thread row in the list
-    if let Some(first_row) = thread_view.list_box.row_at_index(0) {
-        thread_view.list_box.select_row(Some(&first_row));
-    }
 
     let thread_page = adw::NavigationPage::builder()
         .title("Inbox")
@@ -171,13 +161,102 @@ fn build_ui(app: &adw::Application) {
     toast_overlay.set_child(Some(&outer_split));
     window.set_content(Some(&toast_overlay));
 
-    // Command Palette (Ctrl+K)
-    let palette = Rc::new(ui::CommandPalette::new(theme_manager.clone()));
-    let palette_ref = palette.clone();
-    let win_for_palette = window.clone();
-    thread_view.search_button.connect_clicked(move |_| {
-        palette_ref.present(&win_for_palette);
-    });
+    // Reactive Refresh Helper: Rescans active folder, updates thread list & live counters
+    let refresh_view: Rc<dyn Fn()> = {
+        let scanner = scanner.clone();
+        let current_folder = current_folder.clone();
+        let current_title = current_title.clone();
+        let thread_view = thread_view.clone();
+        let reading_view = reading_view.clone();
+        let sidebar_view = sidebar_view.clone();
+        let demo_account = demo_account.clone();
+
+        Rc::new(move || {
+            let folder = current_folder.borrow().clone();
+            let title = current_title.borrow().clone();
+            thread_view.title.set_title(&title);
+
+            let threads = scanner.scan_folder(&folder);
+            thread_view.set_threads(&threads);
+
+            if let Some(first) = threads.first() {
+                reading_view.display_thread(first);
+                if let Some(first_row) = thread_view.list_box.row_at_index(0) {
+                    thread_view.list_box.select_row(Some(&first_row));
+                }
+            } else {
+                reading_view.clear();
+            }
+
+            // Live Mailbox Counter updates
+            let inbox_unread = scanner.count_unread_in_folder(&demo_account.join("INBOX"));
+            let archive_count = scanner.count_total_in_folder(&demo_account.join("Archive"));
+            let trash_count = scanner.count_total_in_folder(&demo_account.join("Trash"));
+            let sent_count = scanner.count_total_in_folder(&demo_account.join("Sent"));
+
+            sidebar_view.update_badge("inbox", inbox_unread);
+            sidebar_view.update_badge("account:demo", inbox_unread);
+            sidebar_view.update_badge("folder:archive", archive_count);
+            sidebar_view.update_badge("folder:trash", trash_count);
+            sidebar_view.update_badge("folder:sent", sent_count);
+        })
+    };
+
+    // Sidebar Mailbox / Folder Switching
+    {
+        let sidebar_view_ref = sidebar_view.clone();
+        let current_folder = current_folder.clone();
+        let current_title = current_title.clone();
+        let refresh_view = refresh_view.clone();
+        let demo_account = demo_account.clone();
+        let mail_root = mail_root.clone();
+
+        sidebar_view.list_box.connect_row_selected(move |_list, row_opt| {
+            let Some(row) = row_opt else { return; };
+            let Some(id) = sidebar_view_ref.get_row_id(row) else { return; };
+
+            match id.as_str() {
+                "inbox" | "account:demo" => {
+                    *current_folder.borrow_mut() = demo_account.join("INBOX");
+                    *current_title.borrow_mut() = "Inbox".to_string();
+                }
+                "account:work" => {
+                    let work_inbox = mail_root.join("work").join("INBOX");
+                    let _ = services::maildir::ensure_maildir_folder(&work_inbox);
+                    *current_folder.borrow_mut() = work_inbox;
+                    *current_title.borrow_mut() = "Gmail (Work)".to_string();
+                }
+                "account:icloud" => {
+                    let icloud_inbox = mail_root.join("icloud").join("INBOX");
+                    let _ = services::maildir::ensure_maildir_folder(&icloud_inbox);
+                    *current_folder.borrow_mut() = icloud_inbox;
+                    *current_title.borrow_mut() = "iCloud".to_string();
+                }
+                "folder:sent" => {
+                    *current_folder.borrow_mut() = demo_account.join("Sent");
+                    *current_title.borrow_mut() = "Sent".to_string();
+                }
+                "folder:archive" => {
+                    *current_folder.borrow_mut() = demo_account.join("Archive");
+                    *current_title.borrow_mut() = "Archive".to_string();
+                }
+                "folder:trash" => {
+                    *current_folder.borrow_mut() = demo_account.join("Trash");
+                    *current_title.borrow_mut() = "Trash".to_string();
+                }
+                "view:feed" => {
+                    *current_folder.borrow_mut() = demo_account.join("INBOX");
+                    *current_title.borrow_mut() = "Feed & Newsletters".to_string();
+                }
+                "view:flagged" => {
+                    *current_folder.borrow_mut() = demo_account.join("INBOX");
+                    *current_title.borrow_mut() = "Flagged".to_string();
+                }
+                _ => {}
+            }
+            refresh_view();
+        });
+    }
 
     // Compose View & Undo Send Toast
     let toast_overlay_ref = toast_overlay.clone();
@@ -194,13 +273,181 @@ fn build_ui(app: &adw::Application) {
         compose_ref.present(&win_for_compose);
     });
 
-    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, /)
+    // Action Handlers: Archive, Trash, Reply, Star with Undo Toasts
+    let do_archive = {
+        let reading_view = reading_view.clone();
+        let demo_account = demo_account.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+
+        Rc::new(move || {
+            let thread_opt = reading_view.current_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                let subject = thread.subject.clone();
+                match services::maildir::archive_thread(&thread, &demo_account) {
+                    Ok(moves) => {
+                        tracing::info!("Archived thread: '{}' ({} files moved)", subject, moves.len());
+                        refresh_view();
+                        let refresh_undo = refresh_view.clone();
+                        ui::show_undo_action_toast(
+                            &toast_overlay,
+                            &format!("Archived: {subject}"),
+                            move || {
+                                if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                                    tracing::error!("Failed to undo archive: {e}");
+                                } else {
+                                    tracing::info!("Restored archived thread: '{subject}'");
+                                    refresh_undo();
+                                }
+                            },
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!("Archive failed: {err}");
+                    }
+                }
+            }
+        })
+    };
+
+    let do_trash = {
+        let reading_view = reading_view.clone();
+        let demo_account = demo_account.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+
+        Rc::new(move || {
+            let thread_opt = reading_view.current_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                let subject = thread.subject.clone();
+                match services::maildir::trash_thread(&thread, &demo_account) {
+                    Ok(moves) => {
+                        tracing::info!("Moved thread to trash: '{}' ({} files moved)", subject, moves.len());
+                        refresh_view();
+                        let refresh_undo = refresh_view.clone();
+                        ui::show_undo_action_toast(
+                            &toast_overlay,
+                            &format!("Deleted: {subject}"),
+                            move || {
+                                if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                                    tracing::error!("Failed to undo trash: {e}");
+                                } else {
+                                    tracing::info!("Restored trashed thread: '{subject}'");
+                                    refresh_undo();
+                                }
+                            },
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!("Trash failed: {err}");
+                    }
+                }
+            }
+        })
+    };
+
+    let do_reply = {
+        let reading_view = reading_view.clone();
+        let compose_dialog = compose_dialog.clone();
+        let win = window.clone();
+
+        Rc::new(move || {
+            let thread_opt = reading_view.current_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                let to = thread.senders.first().cloned().unwrap_or_default();
+                let body = thread.messages.first().and_then(|m| m.body_plain.clone()).unwrap_or_default();
+                compose_dialog.present_reply(&win, &to, &thread.subject, &body);
+            } else {
+                compose_dialog.present(&win);
+            }
+        })
+    };
+
+    let do_star = {
+        let reading_view = reading_view.clone();
+        Rc::new(move || {
+            if let Some(thread) = reading_view.current_thread.borrow().as_ref() {
+                tracing::info!("Toggled star/flag on thread: '{}'", thread.subject);
+            }
+        })
+    };
+
+    // Connect Action Buttons in Reading Pane Header
+    {
+        let do_archive = do_archive.clone();
+        reading_view.archive_btn.connect_clicked(move |_| {
+            do_archive();
+        });
+    }
+    {
+        let do_trash = do_trash.clone();
+        reading_view.trash_btn.connect_clicked(move |_| {
+            do_trash();
+        });
+    }
+    {
+        let do_reply = do_reply.clone();
+        reading_view.reply_btn.connect_clicked(move |_| {
+            do_reply();
+        });
+    }
+    {
+        let do_star = do_star.clone();
+        reading_view.star_btn.connect_clicked(move |_| {
+            do_star();
+        });
+    }
+
+    // Command Palette (Ctrl+K) with full action routing
+    let palette = {
+        let sidebar_view = sidebar_view.clone();
+        let compose_dialog = compose_dialog.clone();
+        let win = window.clone();
+        let do_archive = do_archive.clone();
+        let do_trash = do_trash.clone();
+        let do_star = do_star.clone();
+
+        Rc::new(ui::CommandPalette::with_action_handler(
+            theme_manager.clone(),
+            move |action| match action {
+                "compose" => compose_dialog.present(&win),
+                "nav_inbox" => sidebar_view.select_folder("inbox"),
+                "nav_sent" => sidebar_view.select_folder("folder:sent"),
+                "nav_archive" => sidebar_view.select_folder("folder:archive"),
+                "nav_feed" => sidebar_view.select_folder("view:feed"),
+                "archive" => do_archive(),
+                "trash" => do_trash(),
+                "star" => do_star(),
+                _ => {}
+            },
+        ))
+    };
+
+    let palette_ref = palette.clone();
+    let win_for_palette = window.clone();
+    thread_view.search_button.connect_clicked(move |_| {
+        palette_ref.present(&win_for_palette);
+    });
+
+    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, s, /)
+    let key_actions = ui::KeybindingActions {
+        on_archive: do_archive,
+        on_trash: do_trash,
+        on_reply: do_reply,
+        on_star: do_star,
+    };
+
     ui::setup_window_keybindings(
         &window,
         palette,
         compose_dialog,
         thread_view.list_box.clone(),
+        key_actions,
     );
+
+    // Initial folder load and counter synchronization
+    refresh_view();
+    sidebar_view.select_folder("inbox");
 
     window.present();
 }

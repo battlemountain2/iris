@@ -137,4 +137,30 @@ impl ComposeDialog {
         self.dialog.present(Some(parent));
         self.to_entry.grab_focus();
     }
+
+    pub fn present_reply(
+        &self,
+        parent: &impl IsA<gtk::Widget>,
+        to: &str,
+        subject: &str,
+        quote_body: &str,
+    ) {
+        self.to_entry.set_text(to);
+        let reply_subject = if subject.to_lowercase().starts_with("re:") {
+            subject.to_string()
+        } else {
+            format!("Re: {subject}")
+        };
+        self.subject_entry.set_text(&reply_subject);
+
+        let quote = if !quote_body.is_empty() {
+            format!("\n\n> {}", quote_body.replace('\n', "\n> "))
+        } else {
+            String::new()
+        };
+        self.body_view.buffer().set_text(&quote);
+
+        self.dialog.present(Some(parent));
+        self.body_view.grab_focus();
+    }
 }

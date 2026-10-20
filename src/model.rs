@@ -77,6 +77,7 @@ pub struct Message {
     pub attachments: Vec<AttachmentMeta>,
     pub is_unread: bool,
     pub is_flagged: bool,
+    pub file_path: Option<String>,
 }
 
 /// Metadata for an email attachment.
