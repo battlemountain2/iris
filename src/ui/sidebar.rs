@@ -9,6 +9,7 @@ use adw::prelude::*;
 pub struct SidebarView {
     pub container: gtk::Box,
     pub list_box: gtk::ListBox,
+    pub sync_btn: gtk::Button,
     pub badges: RefCell<HashMap<String, gtk::Label>>,
     pub rows: RefCell<HashMap<String, gtk::ListBoxRow>>,
 }
@@ -58,6 +59,7 @@ impl SidebarView {
         Self {
             container,
             list_box,
+            sync_btn,
             badges: RefCell::new(badges_map),
             rows: RefCell::new(rows_map),
         }

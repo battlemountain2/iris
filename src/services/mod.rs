@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+pub mod attachment;
 pub mod html_renderer;
 pub mod maildir;
+pub mod sync;
 
 pub use maildir::MaildirScanner;

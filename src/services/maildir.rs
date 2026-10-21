@@ -87,24 +87,56 @@ impl MaildirScanner {
             && fs::read_dir(&inbox_cur).map(|mut d| d.next().is_none()).unwrap_or(true);
 
         if inbox_empty {
-            // Email 1
+            // Email 1 (with real MIME Attachment for Hermes bridge)
             let email1 = "From: Alex Rivera <alex@hermes.dev>\r\n\
-                To: Brayan <bry@omarchy.org>\r\n\
-                Subject: Hermes v0.4.0 Release & Audio Overhaul\r\n\
-                Date: Mon, 19 Oct 2026 10:42:00 -0600\r\n\
-                Message-ID: <hermes-release-040@hermes.dev>\r\n\
-                Content-Type: text/plain; charset=utf-8\r\n\
-                \r\n\
-                Hey Brayan,\r\n\
-                \r\n\
-                The Cairo vinyl disc hero and micro-segment visualizer look insane! Just pushed the branch to upstream. \
-                The 32-band Goertzel filter bank runs with zero memory allocations directly tapping the stereo F32LE 48 kHz PCM stream.\r\n\
-                \r\n\
-                Next up, we should ensure the Hermes <-> Iris attachment bridge works smoothly. If someone drags a song or \
-                document from Hermes directly into Iris compose, it should immediately attach with zero friction.\r\n\
-                \r\n\
-                Best,\r\nAlex\r\n";
+Reply-To: Alex Rivera <alex@hermes.dev>\r\n\
+To: Brayan <bry@omarchy.org>\r\n\
+Subject: Hermes v0.4.0 Release & Audio Overhaul\r\n\
+Date: Mon, 19 Oct 2026 10:42:00 -0600\r\n\
+Message-ID: <hermes-release-040@hermes.dev>\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/mixed; boundary=\"HERMES_MIME_BOUNDARY\"\r\n\
+\r\n\
+--HERMES_MIME_BOUNDARY\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+\r\n\
+Hey Brayan,\r\n\
+\r\n\
+The Cairo vinyl disc hero and micro-segment visualizer look insane! Just pushed the branch to upstream. The 32-band Goertzel filter bank runs with zero memory allocations directly tapping the stereo F32LE 48 kHz PCM stream.\r\n\
+\r\n\
+Next up, we should ensure the Hermes <-> Iris attachment bridge works smoothly. I've attached the architecture specification document below.\r\n\
+\r\n\
+Best,\r\nAlex\r\n\
+\r\n\
+--HERMES_MIME_BOUNDARY\r\n\
+Content-Type: text/plain; name=\"hermes_bridge_spec.txt\"\r\n\
+Content-Disposition: attachment; filename=\"hermes_bridge_spec.txt\"\r\n\
+Content-Transfer-Encoding: 7bit\r\n\
+\r\n\
+Hermes <-> Iris Integration Specification\r\n\
+Version: 1.0.0\r\n\
+- Standard downloads: ~/Downloads/Hermes\r\n\
+- Hermes IPC launcher: ~/.local/bin/strata or ~/.local/bin/hermes\r\n\
+- MIME types supported: audio/flac, audio/wav, text/plain, application/pdf\r\n\
+--HERMES_MIME_BOUNDARY--\r\n";
             fs::write(inbox_new.join("1792464000.1.mail:2,"), email1)?;
+
+            // Email 1B (Reply in the same conversation thread)
+            let email1_reply = "From: Brayan <bry@omarchy.org>\r\n\
+To: Alex Rivera <alex@hermes.dev>\r\n\
+Subject: Re: Hermes v0.4.0 Release & Audio Overhaul\r\n\
+Date: Mon, 19 Oct 2026 11:15:00 -0600\r\n\
+Message-ID: <reply-hermes-040@omarchy.org>\r\n\
+In-Reply-To: <hermes-release-040@hermes.dev>\r\n\
+References: <hermes-release-040@hermes.dev>\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+\r\n\
+Hey Alex,\r\n\
+\r\n\
+Reviewed the spec and wired up the attachment extractor. The save-to-Hermes pipeline writes directly to ~/Downloads/Hermes with collision protection.\r\n\
+\r\n\
+Testing it right now!\r\n";
+            fs::write(inbox_new.join("1792464000.2.mail:2,"), email1_reply)?;
 
             // Email 2
             let email2 = "From: GitHub Notifications <notifications@github.com>\r\n\
@@ -542,6 +574,17 @@ fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) ->
         })
         .unwrap_or_else(|| "Unknown Sender".to_string());
 
+    let reply_to = parsed.reply_to().and_then(|addrs| {
+        addrs.iter().next().and_then(|a| {
+            if let Some(name) = a.name() {
+                let addr = a.address().unwrap_or_default();
+                Some(format!("{name} <{addr}>"))
+            } else {
+                a.address().map(|a| a.to_string())
+            }
+        })
+    });
+
     let to = parsed
         .to()
         .map(|addrs| {
@@ -605,6 +648,7 @@ fn parse_rfc822(bytes: &[u8], path: &Path, is_unread: bool, is_flagged: bool) ->
         in_reply_to,
         references,
         from,
+        reply_to,
         to,
         cc,
         date,
@@ -855,6 +899,7 @@ mod tests {
             in_reply_to: None,
             references: vec![],
             from: "test@iris.local".to_string(),
+            reply_to: None,
             to: vec!["me@iris.local".to_string()],
             cc: vec![],
             date: Utc::now(),
@@ -971,6 +1016,7 @@ mod tests {
             in_reply_to: None,
             references: vec![],
             from: "Apple Support <support@apple.com>".to_string(),
+            reply_to: None,
             to: vec!["brayan@omarchy.org".to_string()],
             cc: vec![],
             date: Utc::now(),
@@ -990,6 +1036,7 @@ mod tests {
             in_reply_to: None,
             references: vec![],
             from: "DigitalOcean Billing <billing@digitalocean.com>".to_string(),
+            reply_to: None,
             to: vec!["brayan@omarchy.org".to_string()],
             cc: vec![],
             date: Utc::now(),
@@ -1056,6 +1103,65 @@ mod tests {
         assert!(file1.exists(), "First conversation still intact");
         assert!(file2.exists(), "Second conversation restored to original path");
         assert!(!archived_file.exists(), "Archive destination cleaned up");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_multi_message_thread_grouping_and_attachments() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_multimsg_test_{}", std::process::id()));
+        let account_root = temp_dir.join("demo");
+        let inbox_new = account_root.join("INBOX").join("new");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&inbox_new).unwrap();
+
+        // Message 1 with attachment
+        let email1 = "From: Alex Rivera <alex@hermes.dev>\r\n\
+To: Brayan <bry@omarchy.org>\r\n\
+Subject: Audio Overhaul\r\n\
+Date: Mon, 19 Oct 2026 10:42:00 -0600\r\n\
+Message-ID: <msg-audio-01@hermes.dev>\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/mixed; boundary=\"BOUNDARY\"\r\n\
+\r\n\
+--BOUNDARY\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+\r\n\
+Hey Brayan, here is the spec.\r\n\
+--BOUNDARY\r\n\
+Content-Type: text/plain; name=\"spec.txt\"\r\n\
+Content-Disposition: attachment; filename=\"spec.txt\"\r\n\
+\r\n\
+Attachment contents inside message 1\r\n\
+--BOUNDARY--\r\n";
+        fs::write(inbox_new.join("101.mail:2,"), email1).unwrap();
+
+        // Message 2: Reply in same thread
+        let email2 = "From: Brayan <bry@omarchy.org>\r\n\
+To: Alex Rivera <alex@hermes.dev>\r\n\
+Subject: Re: Audio Overhaul\r\n\
+Date: Mon, 19 Oct 2026 11:15:00 -0600\r\n\
+Message-ID: <msg-audio-02@omarchy.org>\r\n\
+In-Reply-To: <msg-audio-01@hermes.dev>\r\n\
+References: <msg-audio-01@hermes.dev>\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+\r\n\
+Got it, testing now!\r\n";
+        fs::write(inbox_new.join("102.mail:2,"), email2).unwrap();
+
+        let scanner = MaildirScanner::new(temp_dir.clone());
+        let threads = scanner.scan_folder(&account_root.join("INBOX"));
+
+        assert_eq!(threads.len(), 1, "Messages with In-Reply-To must group into 1 thread");
+        let thread = &threads[0];
+        assert_eq!(thread.messages.len(), 2, "Thread must contain both messages");
+
+        let initial_msg = thread.messages.iter().find(|m| m.id == "msg-audio-01@hermes.dev").unwrap();
+        assert_eq!(initial_msg.attachments.len(), 1, "Initial message must have 1 attachment");
+        assert_eq!(initial_msg.attachments[0].filename, "spec.txt");
+
+        let reply_msg = thread.messages.iter().find(|m| m.id == "msg-audio-02@omarchy.org").unwrap();
+        assert_eq!(reply_msg.attachments.len(), 0, "Reply message has 0 attachments");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

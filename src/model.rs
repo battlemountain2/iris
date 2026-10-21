@@ -69,6 +69,7 @@ pub struct Message {
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub from: String,
+    pub reply_to: Option<String>,
     pub to: Vec<String>,
     pub cc: Vec<String>,
     pub date: DateTime<Utc>,

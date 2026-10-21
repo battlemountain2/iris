@@ -4,7 +4,7 @@ mod model;
 mod services;
 mod ui;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use adw::prelude::*;
@@ -120,6 +120,7 @@ fn build_ui(app: &adw::Application) {
     });
 
     let reading_view = Rc::new(ui::ReadingPaneView::new());
+    reading_view.set_toast_overlay(&toast_overlay);
 
     // Dynamic selection: clicking or j/k immediately updates authoritative state and reading view
     {
@@ -310,6 +311,64 @@ fn build_ui(app: &adw::Application) {
         compose_ref.present(&win_for_compose);
     });
 
+    // Sidebar Sync Button (Background worker with animated spinner)
+    {
+        let sync_btn = sidebar_view.sync_btn.clone();
+        let mail_root = mail_root.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+        let is_syncing = Rc::new(Cell::new(false));
+
+        sync_btn.clone().connect_clicked(move |_| {
+            if is_syncing.get() {
+                return;
+            }
+            is_syncing.set(true);
+
+            let spinner = gtk::Spinner::builder().spinning(true).build();
+            sync_btn.set_child(Some(&spinner));
+            sync_btn.set_sensitive(false);
+
+            let btn_done = sync_btn.clone();
+            let sync_flag = is_syncing.clone();
+            let toast_ov = toast_overlay.clone();
+            let refresh = refresh_view.clone();
+
+            services::sync::run_sync_in_background(mail_root.clone(), move |res| {
+                sync_flag.set(false);
+                btn_done.set_child(None::<&gtk::Widget>);
+                btn_done.set_icon_name("view-refresh-symbolic");
+                btn_done.set_sensitive(true);
+
+                match res {
+                    services::sync::SyncResult::SyncedRemote(msg) => {
+                        refresh();
+                        let toast = adw::Toast::builder()
+                            .title(msg)
+                            .timeout(3)
+                            .build();
+                        toast_ov.add_toast(toast);
+                    }
+                    services::sync::SyncResult::RefreshedLocal(count) => {
+                        refresh();
+                        let toast = adw::Toast::builder()
+                            .title(format!("Mailboxes refreshed ({count} messages)"))
+                            .timeout(2)
+                            .build();
+                        toast_ov.add_toast(toast);
+                    }
+                    services::sync::SyncResult::Error(err) => {
+                        let toast = adw::Toast::builder()
+                            .title(format!("Sync error: {err}"))
+                            .timeout(4)
+                            .build();
+                        toast_ov.add_toast(toast);
+                    }
+                }
+            });
+        });
+    }
+
     // Action Handlers: Archive, Trash, Reply, Star with Undo Toasts
     let do_archive = {
         let state = app_state.clone();
@@ -393,8 +452,13 @@ fn build_ui(app: &adw::Application) {
         Rc::new(move || {
             let thread_opt = state.selected_thread.borrow().clone();
             if let Some(thread) = thread_opt {
-                let to = thread.senders.first().cloned().unwrap_or_default();
-                let body = thread.messages.first().and_then(|m| m.body_plain.clone()).unwrap_or_default();
+                let latest_msg = thread.messages.last();
+                let to = latest_msg
+                    .and_then(|m| m.reply_to.clone())
+                    .or_else(|| latest_msg.map(|m| m.from.clone()))
+                    .or_else(|| thread.senders.first().cloned())
+                    .unwrap_or_default();
+                let body = latest_msg.and_then(|m| m.body_plain.clone()).unwrap_or_default();
                 compose_dialog.present_reply(&win, &to, &thread.subject, &body);
             } else {
                 compose_dialog.present(&win);

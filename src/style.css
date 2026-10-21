@@ -27,6 +27,7 @@ navigation-split-view > navigation-page > .view,
   background-image: linear-gradient(170deg, alpha(#ffffff, 0.08) 0%, alpha(#ffffff, 0.02) 25%, alpha(#000000, 0.04) 100%);
   border-right: 1px solid alpha(#ffffff, 0.10);
   box-shadow: inset -1px 0 0 alpha(#ffffff, 0.05);
+  backdrop-filter: blur(20px);
 }
 
 .iris-sidebar headerbar {
@@ -242,6 +243,46 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 .iris-pill-btn:hover {
   background-color: alpha(@theme_accent, 0.20);
   color: @theme_text;
+}
+
+/* Multi-Message Conversation Cards */
+.iris-conversation-card {
+  background-color: alpha(@theme_surface, 0.40);
+  border: 1px solid alpha(@theme_text, 0.08);
+  border-radius: 10px;
+  padding: 14px 18px;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.iris-conversation-card.latest {
+  background-color: transparent;
+  border: none;
+  padding: 4px 0;
+}
+
+.iris-conversation-card.collapsed {
+  padding: 10px 16px;
+  background-color: alpha(@theme_surface, 0.30);
+  border-color: alpha(@theme_text, 0.06);
+}
+
+.iris-conversation-card.collapsed:hover {
+  background-color: alpha(@theme_surface, 0.65);
+  border-color: alpha(@theme_accent, 0.30);
+}
+
+/* Attachment Cards */
+.iris-attachment-card {
+  background-color: alpha(@theme_surface, 0.60);
+  border: 1px solid alpha(@theme_text, 0.10);
+  border-radius: 8px;
+  padding: 10px 14px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.iris-attachment-card:hover {
+  background-color: alpha(@theme_surface, 0.90);
+  border-color: alpha(@theme_accent, 0.35);
 }
 
 /* ========================================================================= */
