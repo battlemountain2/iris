@@ -3,6 +3,8 @@
 pub mod attachment;
 pub mod html_renderer;
 pub mod maildir;
+pub mod outbox;
+pub mod smtp;
 pub mod sync;
 
 pub use maildir::MaildirScanner;

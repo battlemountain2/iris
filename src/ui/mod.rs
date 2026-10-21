@@ -16,4 +16,4 @@ pub use reading_pane::ReadingPaneView;
 pub use sidebar::SidebarView;
 pub use theme::ThemeManager;
 pub use thread_list::ThreadListView;
-pub use undo_send::{show_undo_action_toast, show_undo_toast};
+pub use undo_send::show_undo_action_toast;

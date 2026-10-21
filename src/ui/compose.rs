@@ -2,7 +2,45 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use adw::prelude::*;
+
+#[derive(Clone, Debug)]
+pub struct AccountIdentity {
+    pub id: &'static str,
+    pub display: &'static str,
+    pub email: &'static str,
+}
+
+pub const CONFIGURED_ACCOUNTS: &[AccountIdentity] = &[
+    AccountIdentity {
+        id: "demo",
+        display: "Gmail (Personal)",
+        email: "bry@gmail.com",
+    },
+    AccountIdentity {
+        id: "work",
+        display: "Gmail (Work)",
+        email: "brayan@work.com",
+    },
+    AccountIdentity {
+        id: "icloud",
+        display: "iCloud",
+        email: "brayan@icloud.com",
+    },
+];
+
+#[derive(Clone, Debug)]
+pub struct ComposePayload {
+    pub account_id: String,
+    pub from: String,
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+    pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
+}
 
 pub struct ComposeDialog {
     dialog: adw::Dialog,
@@ -10,12 +48,14 @@ pub struct ComposeDialog {
     subject_entry: gtk::Entry,
     body_view: gtk::TextView,
     from_dropdown: gtk::DropDown,
+    in_reply_to: Rc<RefCell<Option<String>>>,
+    references: Rc<RefCell<Vec<String>>>,
 }
 
 impl ComposeDialog {
     pub fn new<F>(on_send: F) -> Self
     where
-        F: Fn(String, String, String) + 'static,
+        F: Fn(ComposePayload) + 'static,
     {
         let dialog = adw::Dialog::builder()
             .title("New Message")
@@ -41,7 +81,7 @@ impl ComposeDialog {
 
         let send_btn = gtk::Button::builder()
             .label("Send")
-            .tooltip_text("Save Draft (SMTP transport queue in development)")
+            .tooltip_text("Send message (10-second Undo window)")
             .build();
         send_btn.add_css_class("suggested-action");
         header.pack_end(&send_btn);
@@ -68,11 +108,13 @@ impl ComposeDialog {
         from_lbl.add_css_class("dim-label");
         from_hbox.append(&from_lbl);
 
-        let from_dropdown = gtk::DropDown::from_strings(&[
-            "Gmail (Personal) <bry@gmail.com>",
-            "Gmail (Work) <brayan@work.com>",
-            "iCloud <brayan@icloud.com>",
-        ]);
+        let account_labels: Vec<String> = CONFIGURED_ACCOUNTS
+            .iter()
+            .map(|a| format!("{} <{}>", a.display, a.email))
+            .collect();
+        let account_str_slices: Vec<&str> = account_labels.iter().map(|s| s.as_str()).collect();
+
+        let from_dropdown = gtk::DropDown::from_strings(&account_str_slices);
         from_dropdown.set_hexpand(true);
         from_dropdown.add_css_class("flat");
         from_hbox.append(&from_dropdown);
@@ -143,20 +185,42 @@ impl ComposeDialog {
 
         dialog.set_child(Some(&vbox));
 
+        let in_reply_to = Rc::new(RefCell::new(None::<String>));
+        let references = Rc::new(RefCell::new(Vec::<String>::new()));
+
         // Connect Send Button
         let to_clone = to_entry.clone();
         let sub_clone = subject_entry.clone();
         let body_clone = body_view.clone();
+        let from_clone = from_dropdown.clone();
         let diag_clone = dialog.clone();
+        let in_reply_to_clone = in_reply_to.clone();
+        let references_clone = references.clone();
+
         send_btn.connect_clicked(move |_| {
-            let to = to_clone.text().to_string();
-            let subject = sub_clone.text().to_string();
+            let to = to_clone.text().trim().to_string();
+            let subject = sub_clone.text().trim().to_string();
             let buffer = body_clone.buffer();
             let (start, end) = buffer.bounds();
             let body = buffer.text(&start, &end, false).to_string();
 
-            on_send(to, subject, body);
+            let acct_idx = from_clone.selected() as usize;
+            let acct = CONFIGURED_ACCOUNTS
+                .get(acct_idx)
+                .unwrap_or(&CONFIGURED_ACCOUNTS[0]);
+
+            let payload = ComposePayload {
+                account_id: acct.id.to_string(),
+                from: acct.email.to_string(),
+                to,
+                subject,
+                body,
+                in_reply_to: in_reply_to_clone.borrow().clone(),
+                references: references_clone.borrow().clone(),
+            };
+
             diag_clone.close();
+            on_send(payload);
         });
 
         Self {
@@ -165,6 +229,8 @@ impl ComposeDialog {
             subject_entry,
             body_view,
             from_dropdown,
+            in_reply_to,
+            references,
         }
     }
 
@@ -172,6 +238,9 @@ impl ComposeDialog {
         self.to_entry.set_text("");
         self.subject_entry.set_text("");
         self.body_view.buffer().set_text("");
+        *self.in_reply_to.borrow_mut() = None;
+        self.references.borrow_mut().clear();
+        self.from_dropdown.set_selected(0);
         self.dialog.present(Some(parent));
         self.to_entry.grab_focus();
     }
@@ -182,6 +251,9 @@ impl ComposeDialog {
         to: &str,
         subject: &str,
         quote_body: &str,
+        in_reply_to: Option<String>,
+        references: Vec<String>,
+        account_id: Option<&str>,
     ) {
         self.to_entry.set_text(to);
         let reply_subject = if subject.to_lowercase().starts_with("re:") {
@@ -197,6 +269,34 @@ impl ComposeDialog {
             String::new()
         };
         self.body_view.buffer().set_text(&quote);
+
+        *self.in_reply_to.borrow_mut() = in_reply_to;
+        *self.references.borrow_mut() = references;
+
+        if let Some(acct) = account_id {
+            if let Some(pos) = CONFIGURED_ACCOUNTS.iter().position(|a| a.id == acct) {
+                self.from_dropdown.set_selected(pos as u32);
+            }
+        }
+
+        self.dialog.present(Some(parent));
+        self.body_view.grab_focus();
+    }
+
+    pub fn reopen_draft(
+        &self,
+        parent: &impl IsA<gtk::Widget>,
+        to: &str,
+        subject: &str,
+        body: &str,
+        in_reply_to: Option<String>,
+        references: Vec<String>,
+    ) {
+        self.to_entry.set_text(to);
+        self.subject_entry.set_text(subject);
+        self.body_view.buffer().set_text(body);
+        *self.in_reply_to.borrow_mut() = in_reply_to;
+        *self.references.borrow_mut() = references;
 
         self.dialog.present(Some(parent));
         self.body_view.grab_focus();

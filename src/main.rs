@@ -296,14 +296,147 @@ fn build_ui(app: &adw::Application) {
         });
     }
 
-    // Compose View & Undo Send Toast
-    let toast_overlay_ref = toast_overlay.clone();
-    let compose_dialog = Rc::new(ui::ComposeDialog::new(move |to, _subject, _body| {
-        let to_for_undo = to.clone();
-        ui::show_undo_toast(&toast_overlay_ref, &to, move || {
-            tracing::info!("Undoing draft for message to {to_for_undo}");
+    // Compose View & Durable Delayed Outbox Queue (10s Undo Send)
+    let compose_holder: Rc<RefCell<Option<Rc<ui::ComposeDialog>>>> = Rc::new(RefCell::new(None));
+    let holder_for_send = compose_holder.clone();
+    let toast_overlay_send = toast_overlay.clone();
+    let win_send = window.clone();
+    let mail_root_send = mail_root.clone();
+    let refresh_send = refresh_view.clone();
+
+    let compose_dialog = Rc::new(ui::ComposeDialog::new(move |payload| {
+        if payload.to.is_empty() {
+            let toast = adw::Toast::builder()
+                .title("Cannot send: Recipient address is empty")
+                .timeout(3)
+                .build();
+            toast_overlay_send.add_toast(toast);
+            if let Some(ref dlg) = *holder_for_send.borrow() {
+                dlg.reopen_draft(
+                    &win_send,
+                    &payload.to,
+                    &payload.subject,
+                    &payload.body,
+                    payload.in_reply_to,
+                    payload.references,
+                );
+            }
+            return;
+        }
+
+        // 1. Create OutboxMessage
+        let outbox_msg = services::outbox::OutboxMessage::new(
+            &payload.account_id,
+            &payload.from,
+            &payload.to,
+            &payload.subject,
+            &payload.body,
+            payload.in_reply_to.clone(),
+            payload.references.clone(),
+        );
+
+        // 2. Durably enqueue to disk before dispatch
+        if let Err(e) = services::outbox::enqueue_outbox_message(&outbox_msg) {
+            tracing::error!("Failed to enqueue message to outbox disk: {e}");
+        }
+
+        // 3. Prepare 10-second Undo Send timer
+        let cancelled = Rc::new(Cell::new(false));
+        let cancelled_undo = cancelled.clone();
+        let msg_id = outbox_msg.id.clone();
+        let payload_undo = payload.clone();
+        let holder_undo = holder_for_send.clone();
+        let win_undo = win_send.clone();
+        let toast_overlay_undo = toast_overlay_send.clone();
+
+        let toast = adw::Toast::builder()
+            .title(format!("Sending to {}... (10s Undo)", payload.to))
+            .button_label("Undo")
+            .timeout(10)
+            .priority(adw::ToastPriority::High)
+            .build();
+
+        toast.connect_button_clicked(move |_| {
+            cancelled_undo.set(true);
+            services::outbox::remove_from_outbox(&msg_id);
+            if let Some(ref dlg) = *holder_undo.borrow() {
+                dlg.reopen_draft(
+                    &win_undo,
+                    &payload_undo.to,
+                    &payload_undo.subject,
+                    &payload_undo.body,
+                    payload_undo.in_reply_to.clone(),
+                    payload_undo.references.clone(),
+                );
+            }
+            let cancel_toast = adw::Toast::builder()
+                .title("Send cancelled. Draft restored.")
+                .timeout(3)
+                .build();
+            toast_overlay_undo.add_toast(cancel_toast);
+        });
+
+        toast_overlay_send.add_toast(toast);
+
+        // 4. Background dispatch after 10 seconds if not cancelled
+        let mail_root_dispatch = mail_root_send.clone();
+        let refresh_dispatch = refresh_send.clone();
+        let toast_overlay_dispatch = toast_overlay_send.clone();
+        let holder_dispatch = holder_for_send.clone();
+        let win_dispatch = win_send.clone();
+        let payload_err = payload.clone();
+
+        gtk::glib::timeout_add_local_once(std::time::Duration::from_secs(10), move || {
+            if cancelled.get() {
+                tracing::info!("Outbox dispatch aborted: user requested Undo.");
+                return;
+            }
+
+            tracing::info!(
+                "10s Undo window elapsed for {}. Dispatching transport...",
+                outbox_msg.id
+            );
+            services::smtp::dispatch_in_background(
+                mail_root_dispatch,
+                outbox_msg,
+                None, // Local sent-recording fallback or configured SMTP
+                move |res| match res {
+                    Ok(success_msg) => {
+                        refresh_dispatch();
+                        let ok_toast = adw::Toast::builder().title(success_msg).timeout(4).build();
+                        toast_overlay_dispatch.add_toast(ok_toast);
+                    }
+                    Err(err) => {
+                        let fail_toast = adw::Toast::builder()
+                            .title(format!("Delivery failed: {err}. Preserved in drafts."))
+                            .button_label("Reopen")
+                            .timeout(12)
+                            .priority(adw::ToastPriority::High)
+                            .build();
+
+                        let holder_reopen = holder_dispatch.clone();
+                        let win_reopen = win_dispatch.clone();
+                        let p_reopen = payload_err.clone();
+                        fail_toast.connect_button_clicked(move |_| {
+                            if let Some(ref dlg) = *holder_reopen.borrow() {
+                                dlg.reopen_draft(
+                                    &win_reopen,
+                                    &p_reopen.to,
+                                    &p_reopen.subject,
+                                    &p_reopen.body,
+                                    p_reopen.in_reply_to.clone(),
+                                    p_reopen.references.clone(),
+                                );
+                            }
+                        });
+                        toast_overlay_dispatch.add_toast(fail_toast);
+                    }
+                },
+            );
         });
     }));
+
+    *compose_holder.borrow_mut() = Some(compose_dialog.clone());
 
     let compose_ref = compose_dialog.clone();
     let win_for_compose = window.clone();
@@ -459,7 +592,33 @@ fn build_ui(app: &adw::Application) {
                     .or_else(|| thread.senders.first().cloned())
                     .unwrap_or_default();
                 let body = latest_msg.and_then(|m| m.body_plain.clone()).unwrap_or_default();
-                compose_dialog.present_reply(&win, &to, &thread.subject, &body);
+
+                let folder_str = state.current_folder.borrow().to_string_lossy().to_string();
+                let account_id = if folder_str.contains("/work/") {
+                    "work"
+                } else if folder_str.contains("/icloud/") {
+                    "icloud"
+                } else {
+                    "demo"
+                };
+
+                let in_reply_to = latest_msg.map(|m| m.id.clone());
+                let mut references = latest_msg.map(|m| m.references.clone()).unwrap_or_default();
+                if let Some(ref mid) = in_reply_to {
+                    if !references.contains(mid) {
+                        references.push(mid.clone());
+                    }
+                }
+
+                compose_dialog.present_reply(
+                    &win,
+                    &to,
+                    &thread.subject,
+                    &body,
+                    in_reply_to,
+                    references,
+                    Some(account_id),
+                );
             } else {
                 compose_dialog.present(&win);
             }
@@ -611,6 +770,17 @@ fn build_ui(app: &adw::Application) {
     // Initial folder load and counter synchronization
     refresh_view();
     sidebar_view.select_folder("inbox");
+
+    // Startup: Recover any interrupted outbox messages from previous sessions into drafts
+    let recovered_drafts = services::outbox::recover_stale_outbox_to_drafts();
+    if !recovered_drafts.is_empty() {
+        let count = recovered_drafts.len();
+        let toast = adw::Toast::builder()
+            .title(format!("Recovered {count} unsent draft(s)"))
+            .timeout(5)
+            .build();
+        toast_overlay.add_toast(toast);
+    }
 
     window.present();
 }
