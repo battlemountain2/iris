@@ -14,6 +14,14 @@ pub struct AccountIdentity {
     pub email: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutboundAttachment {
+    pub filename: String,
+    pub path: PathBuf,
+    pub size_bytes: u64,
+    pub content_type: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct ComposePayload {
     pub account_id: String,
@@ -24,6 +32,7 @@ pub struct ComposePayload {
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub draft_file_path: Option<PathBuf>,
+    pub attachments: Vec<OutboundAttachment>,
 }
 
 pub struct ComposeDialog {
@@ -38,6 +47,8 @@ pub struct ComposeDialog {
     draft_file_path: Rc<RefCell<Option<PathBuf>>>,
     drafts_dir: Rc<RefCell<Option<PathBuf>>>,
     debounce_timer: Rc<RefCell<Option<gtk::glib::SourceId>>>,
+    pub attachments: Rc<RefCell<Vec<OutboundAttachment>>>,
+    attachments_box: gtk::Box,
 }
 
 impl ComposeDialog {
@@ -131,6 +142,13 @@ impl ComposeDialog {
         });
         header.pack_start(&cancel_btn);
 
+        let attach_btn = gtk::Button::builder()
+            .icon_name("mail-attachment-symbolic")
+            .tooltip_text("Attach Files (Ctrl+Shift+A)")
+            .build();
+        attach_btn.add_css_class("flat");
+        header.pack_end(&attach_btn);
+
         let send_btn = gtk::Button::builder()
             .label("Send")
             .tooltip_text("Send message (10-second Undo window)")
@@ -212,6 +230,17 @@ impl ComposeDialog {
         subject_hbox.append(&subject_entry);
         fields_vbox.append(&subject_hbox);
 
+        // Attachments pill container
+        let attachments = Rc::new(RefCell::new(Vec::<OutboundAttachment>::new()));
+        let attachments_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        attachments_box.add_css_class("iris-compose-attachments");
+        attachments_box.set_margin_start(8);
+        attachments_box.set_margin_end(8);
+        attachments_box.set_margin_top(4);
+        attachments_box.set_margin_bottom(4);
+        attachments_box.set_visible(false);
+        fields_vbox.append(&attachments_box);
+
         vbox.append(&fields_vbox);
 
         // Body Editor
@@ -251,6 +280,7 @@ impl ComposeDialog {
         let accounts_for_send = accounts.clone();
         let draft_path_send = draft_file_path.clone();
         let debounce_timer_send = debounce_timer.clone();
+        let attachments_for_send = attachments.clone();
 
         send_btn.connect_clicked(move |_| {
             if let Some(src) = debounce_timer_send.borrow_mut().take() {
@@ -268,6 +298,7 @@ impl ComposeDialog {
                 .unwrap_or(&accounts_for_send[0]);
 
             let draft_path = draft_path_send.borrow_mut().take();
+            let atts = attachments_for_send.borrow().clone();
 
             let payload = ComposePayload {
                 account_id: acct.id.to_string(),
@@ -278,11 +309,72 @@ impl ComposeDialog {
                 in_reply_to: in_reply_to_clone.borrow().clone(),
                 references: references_clone.borrow().clone(),
                 draft_file_path: draft_path,
+                attachments: atts,
             };
 
             diag_clone.close();
             on_send(payload);
         });
+
+        // Attach Files (Paperclip button & Ctrl+Shift+A)
+        let att_list = attachments.clone();
+        let att_box = attachments_box.clone();
+        let diag_for_file = dialog.clone();
+        attach_btn.connect_clicked(move |_| {
+            let file_dialog = gtk::FileDialog::builder()
+                .title("Attach Files")
+                .modal(true)
+                .build();
+
+            let list_c = att_list.clone();
+            let box_c = att_box.clone();
+            let parent_win = diag_for_file.root().and_then(|r| r.downcast::<gtk::Window>().ok());
+            file_dialog.open_multiple(parent_win.as_ref(), gio::Cancellable::NONE, move |result| {
+                if let Ok(files) = result {
+                    let count = files.n_items();
+                    for i in 0..count {
+                        if let Some(obj) = files.item(i) {
+                            if let Ok(file) = obj.downcast::<gio::File>() {
+                                if let Some(path) = file.path() {
+                                    let filename = path
+                                        .file_name()
+                                        .and_then(|f| f.to_str())
+                                        .unwrap_or("attachment")
+                                        .to_string();
+                                    let size_bytes = std::fs::metadata(&path)
+                                        .map(|m| m.len())
+                                        .unwrap_or(0);
+                                    let content_type = crate::services::attachment::guess_content_type(&filename).to_string();
+
+                                    list_c.borrow_mut().push(OutboundAttachment {
+                                        filename,
+                                        path,
+                                        size_bytes,
+                                        content_type,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    render_attachments(&list_c, &box_c);
+                }
+            });
+        });
+
+        let key_controller = gtk::EventControllerKey::new();
+        let attach_trigger = attach_btn.clone();
+        key_controller.connect_key_pressed(move |_, keyval, _keycode, state| {
+            if state.contains(gtk::gdk::ModifierType::CONTROL_MASK)
+                && state.contains(gtk::gdk::ModifierType::SHIFT_MASK)
+                && (keyval == gtk::gdk::Key::A || keyval == gtk::gdk::Key::a)
+            {
+                attach_trigger.emit_clicked();
+                gtk::glib::Propagation::Stop
+            } else {
+                gtk::glib::Propagation::Proceed
+            }
+        });
+        dialog.add_controller(key_controller);
 
         // Background Auto-Save after 1.5s idle typing
         let connect_change = {
@@ -372,6 +464,8 @@ impl ComposeDialog {
             draft_file_path,
             drafts_dir,
             debounce_timer,
+            attachments,
+            attachments_box,
         }
     }
 
@@ -379,8 +473,28 @@ impl ComposeDialog {
         *self.drafts_dir.borrow_mut() = Some(dir);
     }
 
+    pub fn add_attachment(&self, path: PathBuf) {
+        let filename = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("attachment")
+            .to_string();
+        let size_bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let content_type = crate::services::attachment::guess_content_type(&filename).to_string();
+
+        self.attachments.borrow_mut().push(OutboundAttachment {
+            filename,
+            path,
+            size_bytes,
+            content_type,
+        });
+        render_attachments(&self.attachments, &self.attachments_box);
+    }
+
     pub fn present(&self, parent: &impl IsA<gtk::Widget>) {
         *self.draft_file_path.borrow_mut() = None;
+        self.attachments.borrow_mut().clear();
+        self.attachments_box.set_visible(false);
         self.to_entry.set_text("");
         self.subject_entry.set_text("");
         self.body_view.buffer().set_text("");
@@ -402,6 +516,8 @@ impl ComposeDialog {
         account_id: Option<&str>,
     ) {
         *self.draft_file_path.borrow_mut() = None;
+        self.attachments.borrow_mut().clear();
+        self.attachments_box.set_visible(false);
         self.to_entry.set_text(to);
         let reply_subject = if subject.to_lowercase().starts_with("re:") {
             subject.to_string()
@@ -441,6 +557,8 @@ impl ComposeDialog {
         account_id: Option<&str>,
         draft_path: Option<PathBuf>,
     ) {
+        self.attachments.borrow_mut().clear();
+        self.attachments_box.set_visible(false);
         self.to_entry.set_text(to);
         self.subject_entry.set_text(subject);
         self.body_view.buffer().set_text(body);
@@ -469,6 +587,8 @@ impl ComposeDialog {
         account_id: Option<&str>,
     ) {
         *self.draft_file_path.borrow_mut() = None;
+        self.attachments.borrow_mut().clear();
+        self.attachments_box.set_visible(false);
         self.to_entry.set_text("");
         let fwd_subject = if subject.to_lowercase().starts_with("fwd:") {
             subject.to_string()
@@ -503,6 +623,8 @@ impl ComposeDialog {
         references: Vec<String>,
     ) {
         *self.draft_file_path.borrow_mut() = None;
+        self.attachments.borrow_mut().clear();
+        self.attachments_box.set_visible(false);
         self.to_entry.set_text(to);
         self.subject_entry.set_text(subject);
         self.body_view.buffer().set_text(body);
@@ -511,6 +633,59 @@ impl ComposeDialog {
 
         self.dialog.present(Some(parent));
         self.body_view.grab_focus();
+    }
+}
+
+fn render_attachments(
+    attachments: &Rc<RefCell<Vec<OutboundAttachment>>>,
+    container: &gtk::Box,
+) {
+    while let Some(child) = container.first_child() {
+        container.remove(&child);
+    }
+
+    let atts = attachments.borrow().clone();
+    if atts.is_empty() {
+        container.set_visible(false);
+        return;
+    }
+
+    container.set_visible(true);
+    for (idx, att) in atts.iter().enumerate() {
+        let chip = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        chip.add_css_class("iris-attachment-pill");
+
+        let icon = gtk::Image::from_icon_name("mail-attachment-symbolic");
+        icon.set_icon_size(gtk::IconSize::Normal);
+        chip.append(&icon);
+
+        let size_str = crate::services::attachment::format_file_size(att.size_bytes);
+        let label = gtk::Label::builder()
+            .label(format!("{} ({size_str})", att.filename))
+            .build();
+        chip.append(&label);
+
+        let remove_btn = gtk::Button::builder()
+            .icon_name("window-close-symbolic")
+            .tooltip_text("Remove attachment")
+            .has_frame(false)
+            .build();
+        remove_btn.add_css_class("flat");
+        remove_btn.add_css_class("circular");
+
+        let atts_remove = attachments.clone();
+        let box_remove = container.clone();
+        remove_btn.connect_clicked(move |_| {
+            let mut list = atts_remove.borrow_mut();
+            if idx < list.len() {
+                list.remove(idx);
+            }
+            drop(list);
+            render_attachments(&atts_remove, &box_remove);
+        });
+        chip.append(&remove_btn);
+
+        container.append(&chip);
     }
 }
 

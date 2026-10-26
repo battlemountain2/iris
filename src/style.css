@@ -351,6 +351,24 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
   color: @theme_text;
 }
 
+.iris-compose-attachments {
+  padding: 4px 0;
+}
+
+.iris-attachment-pill {
+  background-color: alpha(@theme_accent, 0.15);
+  border: 1px solid alpha(@theme_accent, 0.40);
+  border-radius: 14px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: @theme_text;
+}
+
+.iris-attachment-pill:hover {
+  background-color: alpha(@theme_accent, 0.25);
+  border-color: alpha(@theme_accent, 0.60);
+}
+
 /* ========================================================================= */
 /* 5. COMMAND PALETTE & FLOATING OVERLAYS                                     */
 /* ========================================================================= */

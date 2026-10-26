@@ -6,6 +6,13 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AttachmentPayload {
+    pub filename: String,
+    pub path: String,
+    pub content_type: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OutboxMessage {
     pub id: String,
     pub account_name: String,
@@ -15,10 +22,13 @@ pub struct OutboxMessage {
     pub body: String,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
+    #[serde(default)]
+    pub attachments: Vec<AttachmentPayload>,
     pub queued_at: chrono::DateTime<Utc>,
 }
 
 impl OutboxMessage {
+    #[allow(dead_code)]
     pub fn new(
         account_name: &str,
         from: &str,
@@ -27,6 +37,28 @@ impl OutboxMessage {
         body: &str,
         in_reply_to: Option<String>,
         references: Vec<String>,
+    ) -> Self {
+        Self::with_attachments(
+            account_name,
+            from,
+            to,
+            subject,
+            body,
+            in_reply_to,
+            references,
+            Vec::new(),
+        )
+    }
+
+    pub fn with_attachments(
+        account_name: &str,
+        from: &str,
+        to: &str,
+        subject: &str,
+        body: &str,
+        in_reply_to: Option<String>,
+        references: Vec<String>,
+        attachments: Vec<AttachmentPayload>,
     ) -> Self {
         let now = Utc::now();
         let id = format!("{}.{}.iris", now.timestamp_micros(), std::process::id());
@@ -39,6 +71,7 @@ impl OutboxMessage {
             body: body.to_string(),
             in_reply_to,
             references,
+            attachments,
             queued_at: now,
         }
     }
@@ -46,19 +79,18 @@ impl OutboxMessage {
     /// Renders an RFC 822 compliant email string for saving to Maildir Sent folder.
     pub fn to_rfc822(&self) -> String {
         let date_str = self.queued_at.to_rfc2822();
-        let mut headers = format!(
+        let mut msg_str = format!(
             "From: {}\r\n\
              To: {}\r\n\
              Subject: {}\r\n\
              Date: {}\r\n\
              Message-ID: <{}>\r\n\
-             MIME-Version: 1.0\r\n\
-             Content-Type: text/plain; charset=utf-8\r\n",
+             MIME-Version: 1.0\r\n",
             self.from, self.to, self.subject, date_str, self.id
         );
 
         if let Some(ref reply_id) = self.in_reply_to {
-            headers.push_str(&format!("In-Reply-To: <{reply_id}>\r\n"));
+            msg_str.push_str(&format!("In-Reply-To: <{reply_id}>\r\n"));
         }
         if !self.references.is_empty() {
             let refs = self
@@ -67,13 +99,54 @@ impl OutboxMessage {
                 .map(|r| format!("<{r}>"))
                 .collect::<Vec<_>>()
                 .join(" ");
-            headers.push_str(&format!("References: {refs}\r\n"));
+            msg_str.push_str(&format!("References: {refs}\r\n"));
         }
 
-        headers.push_str("\r\n");
-        headers.push_str(&self.body);
-        headers.push_str("\r\n");
-        headers
+        if self.attachments.is_empty() {
+            msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n\r\n");
+            msg_str.push_str(&self.body);
+            msg_str.push_str("\r\n");
+        } else {
+            let boundary = format!(
+                "----=_IrisBoundary_{}_{}",
+                self.queued_at.timestamp_micros(),
+                self.id.replace('.', "_")
+            );
+            msg_str.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"));
+
+            // Text part
+            msg_str.push_str(&format!("--{boundary}\r\n"));
+            msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n");
+            msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
+            msg_str.push_str(&self.body);
+            msg_str.push_str("\r\n\r\n");
+
+            // Attachments
+            for att in &self.attachments {
+                let file_path = Path::new(&att.path);
+                if let Ok(bytes) = fs::read(file_path) {
+                    use base64::Engine;
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+                    msg_str.push_str(&format!("--{boundary}\r\n"));
+                    msg_str.push_str(&format!("Content-Type: {}; name=\"{}\"\r\n", att.content_type, att.filename));
+                    msg_str.push_str(&format!("Content-Disposition: attachment; filename=\"{}\"\r\n", att.filename));
+                    msg_str.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
+
+                    for chunk in b64.as_bytes().chunks(76) {
+                        if let Ok(line) = std::str::from_utf8(chunk) {
+                            msg_str.push_str(line);
+                            msg_str.push_str("\r\n");
+                        }
+                    }
+                    msg_str.push_str("\r\n");
+                }
+            }
+
+            msg_str.push_str(&format!("--{boundary}--\r\n"));
+        }
+
+        msg_str
     }
 }
 
@@ -198,6 +271,7 @@ pub fn record_to_sent_maildir(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mail_parser::MimeHeaders;
 
     #[test]
     fn test_outbox_message_creation_and_rfc822() {
@@ -275,6 +349,47 @@ mod tests {
         assert!(draft_path.exists());
 
         // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_outbox_message_with_attachments_rfc822() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_outbox_att_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let test_file = temp_dir.join("test_note.txt");
+        fs::write(&test_file, b"Hello attached world!").unwrap();
+
+        let att = AttachmentPayload {
+            filename: "test_note.txt".to_string(),
+            path: test_file.to_string_lossy().to_string(),
+            content_type: "text/plain; charset=utf-8".to_string(),
+        };
+
+        let msg = OutboxMessage::with_attachments(
+            "demo",
+            "bry@omarchy.org",
+            "alex@hermes.dev",
+            "Multipart Test",
+            "Please check the attachment.",
+            None,
+            vec![],
+            vec![att],
+        );
+
+        let rfc822 = msg.to_rfc822();
+        assert!(rfc822.contains("Content-Type: multipart/mixed; boundary=\""));
+        assert!(rfc822.contains("Content-Disposition: attachment; filename=\"test_note.txt\""));
+        assert!(rfc822.contains("Please check the attachment."));
+
+        // Roundtrip parse with mail_parser
+        let parsed = mail_parser::MessageParser::default().parse(rfc822.as_bytes()).expect("Must parse valid MIME message");
+        assert_eq!(parsed.attachments().count(), 1);
+        let part = parsed.attachments().next().unwrap();
+        assert_eq!(part.attachment_name(), Some("test_note.txt"));
+        assert_eq!(part.contents(), b"Hello attached world!");
+
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }

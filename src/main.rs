@@ -399,8 +399,18 @@ fn build_ui(app: &adw::Application) {
             let _ = services::draft::delete_draft(draft_path);
         }
 
-        // 1. Create OutboxMessage
-        let outbox_msg = services::outbox::OutboxMessage::new(
+        // 1. Create OutboxMessage with attachments
+        let att_payloads = payload
+            .attachments
+            .iter()
+            .map(|a| services::outbox::AttachmentPayload {
+                filename: a.filename.clone(),
+                path: a.path.to_string_lossy().to_string(),
+                content_type: a.content_type.clone(),
+            })
+            .collect();
+
+        let outbox_msg = services::outbox::OutboxMessage::with_attachments(
             &payload.account_id,
             &payload.from,
             &payload.to,
@@ -408,6 +418,7 @@ fn build_ui(app: &adw::Application) {
             &payload.body,
             payload.in_reply_to.clone(),
             payload.references.clone(),
+            att_payloads,
         );
 
         // 2. Durably enqueue to disk before dispatch

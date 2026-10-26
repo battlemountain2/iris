@@ -41,8 +41,7 @@ pub fn send_message_transport(
     let mut builder = LettreMessage::builder()
         .from(from_addr)
         .to(to_addr)
-        .subject(&msg.subject)
-        .header(ContentType::TEXT_PLAIN);
+        .subject(&msg.subject);
 
     if let Some(ref reply_id) = msg.in_reply_to {
         let clean_id = reply_id.trim_matches(|c| c == '<' || c == '>');
@@ -54,9 +53,33 @@ pub fn send_message_transport(
         builder = builder.references(format!("<{clean_id}>"));
     }
 
-    let lettre_msg = builder
-        .body(msg.body.clone())
-        .map_err(|e| format!("Failed to build email message: {e}"))?;
+    let lettre_msg = if msg.attachments.is_empty() {
+        builder
+            .header(ContentType::TEXT_PLAIN)
+            .body(msg.body.clone())
+            .map_err(|e| format!("Failed to build email message: {e}"))?
+    } else {
+        let mut multipart = lettre::message::MultiPart::mixed()
+            .singlepart(lettre::message::SinglePart::plain(msg.body.clone()));
+
+        for att in &msg.attachments {
+            let file_path = Path::new(&att.path);
+            if let Ok(bytes) = std::fs::read(file_path) {
+                let ct: ContentType = att
+                    .content_type
+                    .parse()
+                    .unwrap_or_else(|_| "application/octet-stream".parse().unwrap());
+
+                let attachment_part = lettre::message::Attachment::new(att.filename.clone())
+                    .body(bytes, ct);
+                multipart = multipart.singlepart(attachment_part);
+            }
+        }
+
+        builder
+            .multipart(multipart)
+            .map_err(|e| format!("Failed to build multipart email message: {e}"))?
+    };
 
     // 2. Dispatch via real SMTP if host and credentials configured
     if let Some(cfg) = config {

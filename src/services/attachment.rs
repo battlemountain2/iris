@@ -181,6 +181,61 @@ pub fn open_in_hermes(saved_path: &Path) -> Result<(), String> {
     Err("No compatible file manager launcher found".to_string())
 }
 
+/// Guesses the MIME content type for an outgoing attachment based on file extension.
+pub fn guess_content_type(filename: &str) -> &'static str {
+    let lower = filename.to_lowercase();
+    if lower.ends_with(".pdf") {
+        "application/pdf"
+    } else if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else if lower.ends_with(".flac") {
+        "audio/flac"
+    } else if lower.ends_with(".wav") {
+        "audio/wav"
+    } else if lower.ends_with(".mp3") {
+        "audio/mpeg"
+    } else if lower.ends_with(".ogg") {
+        "audio/ogg"
+    } else if lower.ends_with(".txt") || lower.ends_with(".md") || lower.ends_with(".rs") || lower.ends_with(".toml") {
+        "text/plain; charset=utf-8"
+    } else if lower.ends_with(".html") || lower.ends_with(".htm") {
+        "text/html; charset=utf-8"
+    } else if lower.ends_with(".zip") {
+        "application/zip"
+    } else if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        "application/gzip"
+    } else if lower.ends_with(".json") {
+        "application/json"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+/// Formats byte counts into human-readable strings (e.g. 1.2 MB, 345 KB).
+pub fn format_file_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * KB;
+    const GB: u64 = 1024 * MB;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +312,26 @@ Attachment payload data 12345\r\n\
         assert!(saved_content.contains("Attachment payload data 12345"));
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_guess_content_type() {
+        assert_eq!(guess_content_type("document.pdf"), "application/pdf");
+        assert_eq!(guess_content_type("photo.PNG"), "image/png");
+        assert_eq!(guess_content_type("picture.jpeg"), "image/jpeg");
+        assert_eq!(guess_content_type("audio.flac"), "audio/flac");
+        assert_eq!(guess_content_type("notes.txt"), "text/plain; charset=utf-8");
+        assert_eq!(guess_content_type("script.rs"), "text/plain; charset=utf-8");
+        assert_eq!(guess_content_type("archive.tar.gz"), "application/gzip");
+        assert_eq!(guess_content_type("data.json"), "application/json");
+        assert_eq!(guess_content_type("unknown.xyz"), "application/octet-stream");
+    }
+
+    #[test]
+    fn test_format_file_size() {
+        assert_eq!(format_file_size(500), "500 B");
+        assert_eq!(format_file_size(2048), "2.0 KB");
+        assert_eq!(format_file_size(1024 * 1024 * 3), "3.0 MB");
+        assert_eq!(format_file_size(1024 * 1024 * 1024 * 2), "2.0 GB");
     }
 }
