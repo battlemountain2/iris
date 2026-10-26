@@ -630,38 +630,79 @@ fn build_ui(app: &adw::Application) {
     }
 
     // Action Handlers: Archive, Trash, Reply, Star with Undo Toasts
-    let do_archive = {
+    let archive_thread_fn = {
         let state = app_state.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
 
+        Rc::new(move |thread: Thread| {
+            let subject = thread.subject.clone();
+            let folder = state.current_folder.borrow().clone();
+            let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+            match services::maildir::archive_thread(&thread, &account_fallback) {
+                Ok(moves) => {
+                    tracing::info!("Archived thread: '{}' ({} files moved)", subject, moves.len());
+                    refresh_view();
+                    let refresh_undo = refresh_view.clone();
+                    ui::show_undo_action_toast(
+                        &toast_overlay,
+                        &format!("Archived: {subject}"),
+                        move || {
+                            if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                                tracing::error!("Failed to undo archive: {e}");
+                            } else {
+                                tracing::info!("Restored archived thread: '{subject}'");
+                                refresh_undo();
+                            }
+                        },
+                    );
+                }
+                Err(err) => {
+                    tracing::error!("Archive failed: {err}");
+                }
+            }
+        })
+    };
+
+    let do_archive = {
+        let state = app_state.clone();
+        let archive_fn = archive_thread_fn.clone();
         Rc::new(move || {
-            let thread_opt = state.selected_thread.borrow().clone();
-            if let Some(thread) = thread_opt {
-                let subject = thread.subject.clone();
-                let folder = state.current_folder.borrow().clone();
-                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
-                match services::maildir::archive_thread(&thread, &account_fallback) {
-                    Ok(moves) => {
-                        tracing::info!("Archived thread: '{}' ({} files moved)", subject, moves.len());
-                        refresh_view();
-                        let refresh_undo = refresh_view.clone();
-                        ui::show_undo_action_toast(
-                            &toast_overlay,
-                            &format!("Archived: {subject}"),
-                            move || {
-                                if let Err(e) = services::maildir::restore_moved_files(&moves) {
-                                    tracing::error!("Failed to undo archive: {e}");
-                                } else {
-                                    tracing::info!("Restored archived thread: '{subject}'");
-                                    refresh_undo();
-                                }
-                            },
-                        );
-                    }
-                    Err(err) => {
-                        tracing::error!("Archive failed: {err}");
-                    }
+            if let Some(thread) = state.selected_thread.borrow().clone() {
+                archive_fn(thread);
+            }
+        })
+    };
+
+    let trash_thread_fn = {
+        let state = app_state.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+
+        Rc::new(move |thread: Thread| {
+            let subject = thread.subject.clone();
+            let folder = state.current_folder.borrow().clone();
+            let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+            match services::maildir::trash_thread(&thread, &account_fallback) {
+                Ok(moves) => {
+                    tracing::info!("Moved thread to trash: '{}' ({} files moved)", subject, moves.len());
+                    refresh_view();
+                    let refresh_undo = refresh_view.clone();
+                    ui::show_undo_action_toast(
+                        &toast_overlay,
+                        &format!("Deleted: {subject}"),
+                        move || {
+                            if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                                tracing::error!("Failed to undo trash: {e}");
+                            } else {
+                                tracing::info!("Restored trashed thread: '{subject}'");
+                                refresh_undo();
+                            }
+                        },
+                    );
+                }
+                Err(err) => {
+                    tracing::error!("Trash failed: {err}");
                 }
             }
         })
@@ -669,40 +710,27 @@ fn build_ui(app: &adw::Application) {
 
     let do_trash = {
         let state = app_state.clone();
-        let toast_overlay = toast_overlay.clone();
-        let refresh_view = refresh_view.clone();
-
+        let trash_fn = trash_thread_fn.clone();
         Rc::new(move || {
-            let thread_opt = state.selected_thread.borrow().clone();
-            if let Some(thread) = thread_opt {
-                let subject = thread.subject.clone();
-                let folder = state.current_folder.borrow().clone();
-                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
-                match services::maildir::trash_thread(&thread, &account_fallback) {
-                    Ok(moves) => {
-                        tracing::info!("Moved thread to trash: '{}' ({} files moved)", subject, moves.len());
-                        refresh_view();
-                        let refresh_undo = refresh_view.clone();
-                        ui::show_undo_action_toast(
-                            &toast_overlay,
-                            &format!("Deleted: {subject}"),
-                            move || {
-                                if let Err(e) = services::maildir::restore_moved_files(&moves) {
-                                    tracing::error!("Failed to undo trash: {e}");
-                                } else {
-                                    tracing::info!("Restored trashed thread: '{subject}'");
-                                    refresh_undo();
-                                }
-                            },
-                        );
-                    }
-                    Err(err) => {
-                        tracing::error!("Trash failed: {err}");
-                    }
-                }
+            if let Some(thread) = state.selected_thread.borrow().clone() {
+                trash_fn(thread);
             }
         })
     };
+
+    // Connect Trackpad & Mouse Horizontal Swipe Gestures
+    {
+        let arch_fn = archive_thread_fn.clone();
+        thread_view.connect_swipe_archive(move |thread| {
+            arch_fn(thread);
+        });
+    }
+    {
+        let tr_fn = trash_thread_fn.clone();
+        thread_view.connect_swipe_trash(move |thread| {
+            tr_fn(thread);
+        });
+    }
 
     let do_reply = {
         let state = app_state.clone();

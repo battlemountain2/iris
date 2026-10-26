@@ -183,6 +183,19 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   outline-offset: -1px;
 }
 
+/* Swipe Gesture Feedback */
+.iris-message-row.swipe-archive {
+  background-color: alpha(#5e8052, 0.38) !important;
+  border: 1px solid alpha(#5e8052, 0.70) !important;
+  transition: background-color 80ms ease, border-color 80ms ease;
+}
+
+.iris-message-row.swipe-trash {
+  background-color: alpha(#b94a48, 0.38) !important;
+  border: 1px solid alpha(#b94a48, 0.70) !important;
+  transition: background-color 80ms ease, border-color 80ms ease;
+}
+
 /* Unread Indicator Dot (Mimestream small 7px dot) */
 .iris-unread-dot {
   min-width: 7px;

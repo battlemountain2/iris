@@ -31,6 +31,8 @@ pub struct ThreadListView {
     pub tab_unread_btn: gtk::ToggleButton,
     pub all_threads: RefCell<Vec<Thread>>,
     pub visible_threads: RefCell<Vec<Thread>>,
+    pub swipe_archive_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
+    pub swipe_trash_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
 }
 
 impl ThreadListView {
@@ -155,6 +157,8 @@ impl ThreadListView {
 
         let all_threads = RefCell::new(Vec::new());
         let visible_threads = RefCell::new(Vec::new());
+        let swipe_archive_cb = RefCell::new(None);
+        let swipe_trash_cb = RefCell::new(None);
         let filter_tab = Cell::new(FilterTab::All);
 
         let view = Self {
@@ -172,9 +176,25 @@ impl ThreadListView {
             tab_unread_btn,
             all_threads,
             visible_threads,
+            swipe_archive_cb,
+            swipe_trash_cb,
         };
 
         view
+    }
+
+    pub fn connect_swipe_archive<F>(&self, callback: F)
+    where
+        F: Fn(Thread) + 'static,
+    {
+        *self.swipe_archive_cb.borrow_mut() = Some(Rc::new(callback));
+    }
+
+    pub fn connect_swipe_trash<F>(&self, callback: F)
+    where
+        F: Fn(Thread) + 'static,
+    {
+        *self.swipe_trash_cb.borrow_mut() = Some(Rc::new(callback));
     }
 
     /// Sets up click handlers for the Spark-style filter tabs.
@@ -334,6 +354,9 @@ impl ThreadListView {
             return;
         }
 
+        let archive_cb = self.swipe_archive_cb.borrow().clone();
+        let trash_cb = self.swipe_trash_cb.borrow().clone();
+
         for thread in &filtered {
             let sender = thread
                 .senders
@@ -344,6 +367,7 @@ impl ThreadListView {
             let has_attachment = thread.messages.iter().any(|m| !m.attachments.is_empty());
 
             let row = create_thread_card(
+                thread,
                 sender,
                 &thread.subject,
                 &thread.snippet,
@@ -351,6 +375,8 @@ impl ThreadListView {
                 thread.is_unread,
                 thread.is_flagged,
                 has_attachment,
+                archive_cb.clone(),
+                trash_cb.clone(),
             );
             self.list_box.append(&row);
         }
@@ -412,6 +438,7 @@ pub fn format_human_timestamp_with_ref(dt: &DateTime<Utc>, now: DateTime<Local>)
 }
 
 fn create_thread_card(
+    thread: &Thread,
     sender: &str,
     subject: &str,
     snippet: &str,
@@ -419,9 +446,61 @@ fn create_thread_card(
     is_unread: bool,
     is_flagged: bool,
     has_attachment: bool,
+    on_archive: Option<Rc<dyn Fn(Thread)>>,
+    on_trash: Option<Rc<dyn Fn(Thread)>>,
 ) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.add_css_class("iris-message-row");
+
+    // Gesture controller for two-finger trackpad horizontal pan and mouse drag-swipe
+    let gesture = gtk::GestureDrag::new();
+    gesture.set_touch_only(false);
+
+    let row_drag = row.clone();
+    let row_end = row.clone();
+    let thread_for_arch = thread.clone();
+    let thread_for_trash = thread.clone();
+
+    gesture.connect_drag_update(move |_gesture, offset_x, offset_y| {
+        // Only react when motion is dominantly horizontal
+        if offset_x.abs() > offset_y.abs() * 1.1 {
+            if offset_x > 25.0 {
+                row_drag.add_css_class("swipe-archive");
+                row_drag.remove_css_class("swipe-trash");
+            } else if offset_x < -25.0 {
+                row_drag.add_css_class("swipe-trash");
+                row_drag.remove_css_class("swipe-archive");
+            } else {
+                row_drag.remove_css_class("swipe-archive");
+                row_drag.remove_css_class("swipe-trash");
+            }
+        } else {
+            row_drag.remove_css_class("swipe-archive");
+            row_drag.remove_css_class("swipe-trash");
+        }
+    });
+
+    gesture.connect_drag_end(move |_gesture, offset_x, offset_y| {
+        row_end.remove_css_class("swipe-archive");
+        row_end.remove_css_class("swipe-trash");
+
+        // Trigger action if motion was dominantly horizontal and surpassed 50px threshold
+        if offset_x.abs() > offset_y.abs() * 1.2 && offset_x.abs() >= 50.0 {
+            if offset_x > 0.0 {
+                // Swiped right -> Archive
+                if let Some(ref cb) = on_archive {
+                    cb(thread_for_arch.clone());
+                }
+            } else {
+                // Swiped left -> Trash
+                if let Some(ref cb) = on_trash {
+                    cb(thread_for_trash.clone());
+                }
+            }
+        }
+    });
+
+    row.add_controller(gesture);
 
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
     vbox.set_margin_start(12);
