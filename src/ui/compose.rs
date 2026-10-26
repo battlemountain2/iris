@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use adw::prelude::*;
 
@@ -22,6 +23,7 @@ pub struct ComposePayload {
     pub body: String,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
+    pub draft_file_path: Option<PathBuf>,
 }
 
 pub struct ComposeDialog {
@@ -33,6 +35,9 @@ pub struct ComposeDialog {
     pub accounts: Vec<AccountIdentity>,
     in_reply_to: Rc<RefCell<Option<String>>>,
     references: Rc<RefCell<Vec<String>>>,
+    draft_file_path: Rc<RefCell<Option<PathBuf>>>,
+    drafts_dir: Rc<RefCell<Option<PathBuf>>>,
+    debounce_timer: Rc<RefCell<Option<gtk::glib::SourceId>>>,
 }
 
 impl ComposeDialog {
@@ -85,15 +90,43 @@ impl ComposeDialog {
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
         vbox.add_css_class("iris-compose");
 
-        // Headerbar with Cancel and Send
+        // Headerbar with Discard, Cancel and Send
         let header = adw::HeaderBar::new();
         header.set_show_start_title_buttons(false);
         header.set_show_end_title_buttons(false);
 
+        let draft_file_path = Rc::new(RefCell::new(None::<PathBuf>));
+        let drafts_dir = Rc::new(RefCell::new(None::<PathBuf>));
+        let debounce_timer = Rc::new(RefCell::new(None::<gtk::glib::SourceId>));
+
+        let discard_btn = gtk::Button::builder()
+            .label("Discard")
+            .tooltip_text("Discard draft")
+            .build();
+        discard_btn.add_css_class("flat");
+        let dialog_discard = dialog.clone();
+        let draft_path_discard = draft_file_path.clone();
+        let timer_discard = debounce_timer.clone();
+        discard_btn.connect_clicked(move |_| {
+            if let Some(src) = timer_discard.borrow_mut().take() {
+                src.remove();
+            }
+            if let Some(ref path) = *draft_path_discard.borrow() {
+                let _ = crate::services::draft::delete_draft(path);
+            }
+            *draft_path_discard.borrow_mut() = None;
+            dialog_discard.close();
+        });
+        header.pack_start(&discard_btn);
+
         let cancel_btn = gtk::Button::builder().label("Cancel").build();
         cancel_btn.add_css_class("flat");
         let dialog_cancel = dialog.clone();
+        let timer_cancel = debounce_timer.clone();
         cancel_btn.connect_clicked(move |_| {
+            if let Some(src) = timer_cancel.borrow_mut().take() {
+                src.remove();
+            }
             dialog_cancel.close();
         });
         header.pack_start(&cancel_btn);
@@ -216,8 +249,13 @@ impl ComposeDialog {
         let in_reply_to_clone = in_reply_to.clone();
         let references_clone = references.clone();
         let accounts_for_send = accounts.clone();
+        let draft_path_send = draft_file_path.clone();
+        let debounce_timer_send = debounce_timer.clone();
 
         send_btn.connect_clicked(move |_| {
+            if let Some(src) = debounce_timer_send.borrow_mut().take() {
+                src.remove();
+            }
             let to = to_clone.text().trim().to_string();
             let subject = sub_clone.text().trim().to_string();
             let buffer = body_clone.buffer();
@@ -229,6 +267,8 @@ impl ComposeDialog {
                 .get(acct_idx)
                 .unwrap_or(&accounts_for_send[0]);
 
+            let draft_path = draft_path_send.borrow_mut().take();
+
             let payload = ComposePayload {
                 account_id: acct.id.to_string(),
                 from: acct.email.to_string(),
@@ -237,11 +277,88 @@ impl ComposeDialog {
                 body,
                 in_reply_to: in_reply_to_clone.borrow().clone(),
                 references: references_clone.borrow().clone(),
+                draft_file_path: draft_path,
             };
 
             diag_clone.close();
             on_send(payload);
         });
+
+        // Background Auto-Save after 1.5s idle typing
+        let connect_change = {
+            let drafts_dir = drafts_dir.clone();
+            let draft_path = draft_file_path.clone();
+            let debounce = debounce_timer.clone();
+            let to_e = to_entry.clone();
+            let sub_e = subject_entry.clone();
+            let body_v = body_view.clone();
+            let from_d = from_dropdown.clone();
+            let accts = accounts.clone();
+            let in_rep = in_reply_to.clone();
+            let refs = references.clone();
+
+            Rc::new(move || {
+                if let Some(src) = debounce.borrow_mut().take() {
+                    src.remove();
+                }
+                let d_dir_c = drafts_dir.clone();
+                let d_path_c = draft_path.clone();
+                let timer_c = debounce.clone();
+                let to_c = to_e.clone();
+                let sub_c = sub_e.clone();
+                let body_c = body_v.clone();
+                let from_c = from_d.clone();
+                let accts_c = accts.clone();
+                let in_rep_c = in_rep.clone();
+                let refs_c = refs.clone();
+
+                let source = gtk::glib::timeout_add_local_once(
+                    std::time::Duration::from_millis(1500),
+                    move || {
+                        timer_c.borrow_mut().take();
+                        if let Some(ref d_dir) = *d_dir_c.borrow() {
+                            let to = to_c.text().trim().to_string();
+                            let subject = sub_c.text().trim().to_string();
+                            let buf = body_c.buffer();
+                            let (start, end) = buf.bounds();
+                            let body = buf.text(&start, &end, false).to_string();
+
+                            let acct_idx = from_c.selected() as usize;
+                            let acct = accts_c.get(acct_idx).unwrap_or(&accts_c[0]);
+                            let existing = d_path_c.borrow().clone();
+
+                            if let Ok(new_path) = crate::services::draft::save_draft(
+                                d_dir,
+                                existing.as_deref(),
+                                &acct.id,
+                                &acct.email,
+                                &to,
+                                &subject,
+                                &body,
+                                in_rep_c.borrow().as_deref(),
+                                &refs_c.borrow(),
+                            ) {
+                                *d_path_c.borrow_mut() = new_path;
+                            }
+                        }
+                    },
+                );
+                *debounce.borrow_mut() = Some(source);
+            })
+        };
+
+        {
+            let on_chg = connect_change.clone();
+            to_entry.connect_changed(move |_| on_chg());
+        }
+        {
+            let on_chg = connect_change.clone();
+            subject_entry.connect_changed(move |_| on_chg());
+        }
+        {
+            let on_chg = connect_change.clone();
+            body_view.buffer().connect_changed(move |_| on_chg());
+        }
 
         Self {
             dialog,
@@ -252,10 +369,18 @@ impl ComposeDialog {
             accounts,
             in_reply_to,
             references,
+            draft_file_path,
+            drafts_dir,
+            debounce_timer,
         }
     }
 
+    pub fn set_drafts_dir(&self, dir: PathBuf) {
+        *self.drafts_dir.borrow_mut() = Some(dir);
+    }
+
     pub fn present(&self, parent: &impl IsA<gtk::Widget>) {
+        *self.draft_file_path.borrow_mut() = None;
         self.to_entry.set_text("");
         self.subject_entry.set_text("");
         self.body_view.buffer().set_text("");
@@ -276,6 +401,7 @@ impl ComposeDialog {
         references: Vec<String>,
         account_id: Option<&str>,
     ) {
+        *self.draft_file_path.borrow_mut() = None;
         self.to_entry.set_text(to);
         let reply_subject = if subject.to_lowercase().starts_with("re:") {
             subject.to_string()
@@ -304,6 +430,34 @@ impl ComposeDialog {
         self.body_view.grab_focus();
     }
 
+    pub fn present_edit_draft(
+        &self,
+        parent: &impl IsA<gtk::Widget>,
+        to: &str,
+        subject: &str,
+        body: &str,
+        in_reply_to: Option<String>,
+        references: Vec<String>,
+        account_id: Option<&str>,
+        draft_path: Option<PathBuf>,
+    ) {
+        self.to_entry.set_text(to);
+        self.subject_entry.set_text(subject);
+        self.body_view.buffer().set_text(body);
+        *self.in_reply_to.borrow_mut() = in_reply_to;
+        *self.references.borrow_mut() = references;
+        *self.draft_file_path.borrow_mut() = draft_path;
+
+        if let Some(acct) = account_id {
+            if let Some(pos) = self.accounts.iter().position(|a| a.id == acct) {
+                self.from_dropdown.set_selected(pos as u32);
+            }
+        }
+
+        self.dialog.present(Some(parent));
+        self.body_view.grab_focus();
+    }
+
     pub fn present_forward(
         &self,
         parent: &impl IsA<gtk::Widget>,
@@ -314,6 +468,7 @@ impl ComposeDialog {
         original_body: &str,
         account_id: Option<&str>,
     ) {
+        *self.draft_file_path.borrow_mut() = None;
         self.to_entry.set_text("");
         let fwd_subject = if subject.to_lowercase().starts_with("fwd:") {
             subject.to_string()
@@ -347,6 +502,7 @@ impl ComposeDialog {
         in_reply_to: Option<String>,
         references: Vec<String>,
     ) {
+        *self.draft_file_path.borrow_mut() = None;
         self.to_entry.set_text(to);
         self.subject_entry.set_text(subject);
         self.body_view.buffer().set_text(body);

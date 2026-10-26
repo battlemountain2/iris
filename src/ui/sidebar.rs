@@ -155,6 +155,7 @@ fn populate_mailboxes(
 
     add_row(list_box, badges, rows, "view:feed", "Feed & Newsletters", "newspaper-symbolic", None);
     add_row(list_box, badges, rows, "view:flagged", "Flagged", "starred-symbolic", None);
+    add_row(list_box, badges, rows, "folder:drafts", "Drafts", "document-edit-symbolic", None);
     add_row(list_box, badges, rows, "folder:sent", "Sent", "mail-sent-symbolic", None);
     add_row(list_box, badges, rows, "folder:archive", "Archive", "mail-archive-symbolic", None);
     add_row(list_box, badges, rows, "folder:trash", "Trash", "user-trash-symbolic", None);

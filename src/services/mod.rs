@@ -2,9 +2,12 @@
 
 pub mod attachment;
 pub mod config;
+pub mod draft;
 pub mod html_renderer;
 pub mod maildir;
+pub mod notmuch;
 pub mod outbox;
+pub mod search;
 pub mod smtp;
 pub mod sync;
 

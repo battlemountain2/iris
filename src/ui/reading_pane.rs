@@ -16,6 +16,7 @@ pub struct ReadingPaneView {
     pub reply_btn: gtk::Button,
     pub reply_all_btn: gtk::Button,
     pub forward_btn: gtk::Button,
+    pub edit_draft_btn: gtk::Button,
     pub star_btn: gtk::Button,
     pub subject_label: gtk::Label,
     pub privacy_banner: gtk::Box,
@@ -78,6 +79,15 @@ impl ReadingPaneView {
         reply_btn.add_css_class("flat");
         header.pack_end(&reply_btn);
 
+        let edit_draft_btn = gtk::Button::builder()
+            .icon_name("document-edit-symbolic")
+            .tooltip_text("Edit Draft")
+            .label("Edit Draft")
+            .build();
+        edit_draft_btn.add_css_class("suggested-action");
+        edit_draft_btn.set_visible(false);
+        header.pack_end(&edit_draft_btn);
+
         let star_btn = gtk::Button::builder()
             .icon_name("non-starred-symbolic")
             .tooltip_text("Star / Flag (s)")
@@ -139,6 +149,7 @@ impl ReadingPaneView {
             reply_btn,
             reply_all_btn,
             forward_btn,
+            edit_draft_btn,
             star_btn,
             subject_label,
             privacy_banner,
@@ -170,6 +181,26 @@ impl ReadingPaneView {
             self.star_btn.set_icon_name("non-starred-symbolic");
             self.star_btn.set_tooltip_text(Some("Star / Flag (s)"));
             self.star_btn.remove_css_class("accent");
+        }
+
+        // Toggle Edit Draft vs Reply/Forward buttons if viewing a draft
+        let is_draft = thread.messages.iter().any(|m| {
+            m.file_path
+                .as_ref()
+                .map(|p| p.contains("/Drafts/") || (p.contains(":2,") && p.split(":2,").nth(1).unwrap_or("").contains('D')))
+                .unwrap_or(false)
+        });
+
+        if is_draft {
+            self.edit_draft_btn.set_visible(true);
+            self.reply_btn.set_visible(false);
+            self.reply_all_btn.set_visible(false);
+            self.forward_btn.set_visible(false);
+        } else {
+            self.edit_draft_btn.set_visible(false);
+            self.reply_btn.set_visible(true);
+            self.reply_all_btn.set_visible(true);
+            self.forward_btn.set_visible(true);
         }
 
         // Remote image privacy protection banner check across all messages
@@ -229,6 +260,10 @@ impl ReadingPaneView {
         self.allow_remote_images.set(false);
         self.subject_label.set_text("No conversation selected");
         self.star_btn.set_icon_name("non-starred-symbolic");
+        self.edit_draft_btn.set_visible(false);
+        self.reply_btn.set_visible(true);
+        self.reply_all_btn.set_visible(true);
+        self.forward_btn.set_visible(true);
         self.privacy_banner.set_visible(false);
         self.timeline_strip.set_visible(false);
         while let Some(child) = self.timeline_strip.first_child() {

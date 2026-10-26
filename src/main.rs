@@ -281,9 +281,11 @@ fn build_ui(app: &adw::Application) {
                     let archive_count = scanner.count_total_in_folder(&acct_dir.join("Archive"));
                     let trash_count = scanner.count_total_in_folder(&acct_dir.join("Trash"));
                     let sent_count = scanner.count_total_in_folder(&acct_dir.join("Sent"));
+                    let drafts_count = scanner.count_total_in_folder(&acct_dir.join("Drafts"));
                     sidebar_view.update_badge("folder:archive", archive_count);
                     sidebar_view.update_badge("folder:trash", trash_count);
                     sidebar_view.update_badge("folder:sent", sent_count);
+                    sidebar_view.update_badge("folder:drafts", drafts_count);
                 }
             }
             sidebar_view.update_badge("inbox", total_unread);
@@ -326,6 +328,12 @@ fn build_ui(app: &adw::Application) {
                 }
             } else {
                 match id.as_str() {
+                    "folder:drafts" => {
+                        let drafts_dir = demo_account.join("Drafts");
+                        let _ = services::maildir::ensure_maildir_folder(&drafts_dir);
+                        *state.current_folder.borrow_mut() = drafts_dir;
+                        *state.current_title.borrow_mut() = "Drafts".to_string();
+                    }
                     "folder:sent" => {
                         *state.current_folder.borrow_mut() = demo_account.join("Sent");
                         *state.current_title.borrow_mut() = "Sent".to_string();
@@ -384,6 +392,11 @@ fn build_ui(app: &adw::Application) {
                 );
             }
             return;
+        }
+
+        // Clean up draft file from disk if message was being edited from Drafts
+        if let Some(ref draft_path) = payload.draft_file_path {
+            let _ = services::draft::delete_draft(draft_path);
         }
 
         // 1. Create OutboxMessage
@@ -518,12 +531,41 @@ fn build_ui(app: &adw::Application) {
         });
     }));
 
+    compose_dialog.set_drafts_dir(demo_account.join("Drafts"));
     *compose_holder.borrow_mut() = Some(compose_dialog.clone());
 
     let compose_ref = compose_dialog.clone();
     let win_for_compose = window.clone();
     thread_view.compose_btn.connect_clicked(move |_| {
         compose_ref.present(&win_for_compose);
+    });
+
+    let edit_draft_ref = compose_dialog.clone();
+    let win_for_draft = window.clone();
+    let reading_view_draft = reading_view.clone();
+    reading_view.edit_draft_btn.connect_clicked(move |_| {
+        let thread_opt = reading_view_draft.current_thread.borrow().clone();
+        if let Some(thread) = thread_opt {
+            if let Some(msg) = thread.messages.first() {
+                let to_str = msg.to.join(", ");
+                let subject = msg.subject.clone();
+                let body = msg.body_plain.clone().unwrap_or_default();
+                let in_reply_to = msg.in_reply_to.clone();
+                let references = msg.references.clone();
+                let draft_path = msg.file_path.as_ref().map(PathBuf::from);
+
+                edit_draft_ref.present_edit_draft(
+                    &win_for_draft,
+                    &to_str,
+                    &subject,
+                    &body,
+                    in_reply_to,
+                    references,
+                    None,
+                    draft_path,
+                );
+            }
+        }
     });
 
     // Sidebar Sync Button (Background worker with animated spinner)

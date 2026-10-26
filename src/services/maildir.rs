@@ -218,6 +218,25 @@ Testing it right now!\r\n";
             fs::write(sent_cur.join("1792465000.sent.mail:2,S"), email_sent)?;
         }
 
+        // Seed Drafts if empty
+        let drafts_dir = demo_root.join("Drafts");
+        ensure_maildir_folder(&drafts_dir)?;
+        let drafts_cur = drafts_dir.join("cur");
+        let drafts_empty = fs::read_dir(&drafts_cur).map(|mut d| d.next().is_none()).unwrap_or(true);
+        if drafts_empty {
+            let email_draft = "From: Brayan <bry@omarchy.org>\r\n\
+                To: Alex Rivera <alex@hermes.dev>\r\n\
+                Subject: Draft: Audio Pipeline & Micro-Visualizer Ideas\r\n\
+                Date: Mon, 19 Oct 2026 16:45:00 -0600\r\n\
+                Message-ID: <draft-audio-pipeline@omarchy.org>\r\n\
+                Content-Type: text/plain; charset=utf-8\r\n\
+                \r\n\
+                Hey Alex,\r\n\
+                \r\n\
+                Drafting some thoughts on the 32-band Goertzel filter bank and Wayland IPC socket bridges...\r\n";
+            fs::write(drafts_cur.join("1792468000.draft.mail:2,DS"), email_draft)?;
+        }
+
         Ok(())
     }
 

@@ -254,6 +254,7 @@ impl ThreadListView {
     /// Filters and populates visible thread cards based on the search query and active tab.
     pub fn apply_filter(&self, query: &str) {
         let q = query.trim().to_lowercase();
+        let search_query = crate::services::search::SearchQuery::parse(query);
         let active_tab = self.filter_tab.get();
         let all = self.all_threads.borrow();
 
@@ -273,9 +274,7 @@ impl ThreadListView {
                 if q.is_empty() {
                     true
                 } else {
-                    t.subject.to_lowercase().contains(&q)
-                        || t.snippet.to_lowercase().contains(&q)
-                        || t.senders.iter().any(|s| s.to_lowercase().contains(&q))
+                    search_query.matches_thread(t)
                 }
             })
             .cloned()
