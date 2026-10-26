@@ -1,1 +1,35 @@
+# Rust build artifacts
 /target
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+.zed/
+*.swp
+*.swo
+*~
+
+# Operating system artifacts
+.DS_Store
+Thumbs.db
+
+# Secrets, environment, and credentials
+*.env
+*.env.*
+*.key
+*.pem
+credentials.json
+accounts.json
+auth.json
+
+# Local mailbox data, outbox, and scratch files
+outbox/
+drafts/
+data/test_mail/
+data/maildir/
+data/local/
+*.log
+
+# Test and coverage artifacts
+*.profraw
+*.profdata
