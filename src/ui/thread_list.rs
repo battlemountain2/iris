@@ -146,6 +146,13 @@ impl ThreadListView {
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
 
+        // Escape inside search clears query and returns focus to list
+        let list_box_focus = list_box.clone();
+        search_entry.connect_stop_search(move |entry| {
+            entry.set_text("");
+            list_box_focus.grab_focus();
+        });
+
         let all_threads = RefCell::new(Vec::new());
         let visible_threads = RefCell::new(Vec::new());
         let filter_tab = Cell::new(FilterTab::All);

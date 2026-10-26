@@ -16,15 +16,20 @@ pub struct SidebarView {
 
 impl SidebarView {
     pub fn new() -> Self {
+        Self::with_accounts(&[])
+    }
+
+    pub fn with_accounts(accounts: &[crate::services::config::AccountConfig]) -> Self {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         container.add_css_class("iris-sidebar");
 
         let header = adw::HeaderBar::new();
         header.set_show_end_title_buttons(false);
 
+        let acct_count = if accounts.is_empty() { 3 } else { accounts.len() };
         let title = adw::WindowTitle::builder()
             .title("Mailboxes")
-            .subtitle("3 accounts")
+            .subtitle(format!("{acct_count} accounts"))
             .build();
         header.set_title_widget(Some(&title));
 
@@ -51,7 +56,7 @@ impl SidebarView {
 
         let mut badges_map = HashMap::new();
         let mut rows_map = HashMap::new();
-        populate_default_mailboxes(&list_box, &mut badges_map, &mut rows_map);
+        populate_mailboxes(&list_box, accounts, &mut badges_map, &mut rows_map);
 
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
@@ -95,8 +100,9 @@ impl SidebarView {
     }
 }
 
-fn populate_default_mailboxes(
+fn populate_mailboxes(
     list_box: &gtk::ListBox,
+    accounts: &[crate::services::config::AccountConfig],
     badges: &mut HashMap<String, gtk::Label>,
     rows: &mut HashMap<String, gtk::ListBoxRow>,
 ) {
@@ -117,10 +123,18 @@ fn populate_default_mailboxes(
     header_row1.set_child(Some(&inboxes_label));
     list_box.append(&header_row1);
 
-    add_row(list_box, badges, rows, "inbox", "All Inboxes", "mail-folder-inbox-symbolic", Some(3));
-    add_row(list_box, badges, rows, "account:demo", "Gmail (Personal)", "mail-inbox-symbolic", Some(2));
-    add_row(list_box, badges, rows, "account:work", "Gmail (Work)", "mail-inbox-symbolic", None);
-    add_row(list_box, badges, rows, "account:icloud", "iCloud", "mail-inbox-symbolic", Some(1));
+    add_row(list_box, badges, rows, "inbox", "All Inboxes", "mail-folder-inbox-symbolic", None);
+
+    if accounts.is_empty() {
+        add_row(list_box, badges, rows, "account:demo", "Gmail (Personal)", "mail-inbox-symbolic", Some(2));
+        add_row(list_box, badges, rows, "account:work", "Gmail (Work)", "mail-inbox-symbolic", None);
+        add_row(list_box, badges, rows, "account:icloud", "iCloud", "mail-inbox-symbolic", Some(1));
+    } else {
+        for acct in accounts {
+            let row_id = format!("account:{}", acct.id);
+            add_row(list_box, badges, rows, &row_id, &acct.display_name, "mail-inbox-symbolic", None);
+        }
+    }
 
     // Section 2: Smart Views
     let views_label = gtk::Label::builder()

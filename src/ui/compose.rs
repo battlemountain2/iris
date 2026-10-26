@@ -6,30 +6,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use adw::prelude::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AccountIdentity {
-    pub id: &'static str,
-    pub display: &'static str,
-    pub email: &'static str,
+    pub id: String,
+    pub display: String,
+    pub email: String,
 }
-
-pub const CONFIGURED_ACCOUNTS: &[AccountIdentity] = &[
-    AccountIdentity {
-        id: "demo",
-        display: "Gmail (Personal)",
-        email: "bry@gmail.com",
-    },
-    AccountIdentity {
-        id: "work",
-        display: "Gmail (Work)",
-        email: "brayan@work.com",
-    },
-    AccountIdentity {
-        id: "icloud",
-        display: "iCloud",
-        email: "brayan@icloud.com",
-    },
-];
 
 #[derive(Clone, Debug)]
 pub struct ComposePayload {
@@ -48,6 +30,7 @@ pub struct ComposeDialog {
     subject_entry: gtk::Entry,
     body_view: gtk::TextView,
     from_dropdown: gtk::DropDown,
+    pub accounts: Vec<AccountIdentity>,
     in_reply_to: Rc<RefCell<Option<String>>>,
     references: Rc<RefCell<Vec<String>>>,
 }
@@ -57,6 +40,42 @@ impl ComposeDialog {
     where
         F: Fn(ComposePayload) + 'static,
     {
+        Self::with_accounts(&[], on_send)
+    }
+
+    pub fn with_accounts<F>(accounts_in: &[crate::services::config::AccountConfig], on_send: F) -> Self
+    where
+        F: Fn(ComposePayload) + 'static,
+    {
+        let accounts: Vec<AccountIdentity> = if accounts_in.is_empty() {
+            vec![
+                AccountIdentity {
+                    id: "demo".to_string(),
+                    display: "Gmail (Personal)".to_string(),
+                    email: "bry@gmail.com".to_string(),
+                },
+                AccountIdentity {
+                    id: "work".to_string(),
+                    display: "Gmail (Work)".to_string(),
+                    email: "brayan@work.com".to_string(),
+                },
+                AccountIdentity {
+                    id: "icloud".to_string(),
+                    display: "iCloud".to_string(),
+                    email: "brayan@icloud.com".to_string(),
+                },
+            ]
+        } else {
+            accounts_in
+                .iter()
+                .map(|a| AccountIdentity {
+                    id: a.id.clone(),
+                    display: a.display_name.clone(),
+                    email: a.email.clone(),
+                })
+                .collect()
+        };
+
         let dialog = adw::Dialog::builder()
             .title("New Message")
             .content_width(700)
@@ -108,7 +127,7 @@ impl ComposeDialog {
         from_lbl.add_css_class("dim-label");
         from_hbox.append(&from_lbl);
 
-        let account_labels: Vec<String> = CONFIGURED_ACCOUNTS
+        let account_labels: Vec<String> = accounts
             .iter()
             .map(|a| format!("{} <{}>", a.display, a.email))
             .collect();
@@ -196,6 +215,7 @@ impl ComposeDialog {
         let diag_clone = dialog.clone();
         let in_reply_to_clone = in_reply_to.clone();
         let references_clone = references.clone();
+        let accounts_for_send = accounts.clone();
 
         send_btn.connect_clicked(move |_| {
             let to = to_clone.text().trim().to_string();
@@ -205,9 +225,9 @@ impl ComposeDialog {
             let body = buffer.text(&start, &end, false).to_string();
 
             let acct_idx = from_clone.selected() as usize;
-            let acct = CONFIGURED_ACCOUNTS
+            let acct = accounts_for_send
                 .get(acct_idx)
-                .unwrap_or(&CONFIGURED_ACCOUNTS[0]);
+                .unwrap_or(&accounts_for_send[0]);
 
             let payload = ComposePayload {
                 account_id: acct.id.to_string(),
@@ -229,6 +249,7 @@ impl ComposeDialog {
             subject_entry,
             body_view,
             from_dropdown,
+            accounts,
             in_reply_to,
             references,
         }
@@ -274,7 +295,7 @@ impl ComposeDialog {
         *self.references.borrow_mut() = references;
 
         if let Some(acct) = account_id {
-            if let Some(pos) = CONFIGURED_ACCOUNTS.iter().position(|a| a.id == acct) {
+            if let Some(pos) = self.accounts.iter().position(|a| a.id == acct) {
                 self.from_dropdown.set_selected(pos as u32);
             }
         }
@@ -308,7 +329,7 @@ impl ComposeDialog {
         self.references.borrow_mut().clear();
 
         if let Some(acct) = account_id {
-            if let Some(pos) = CONFIGURED_ACCOUNTS.iter().position(|a| a.id == acct) {
+            if let Some(pos) = self.accounts.iter().position(|a| a.id == acct) {
                 self.from_dropdown.set_selected(pos as u32);
             }
         }

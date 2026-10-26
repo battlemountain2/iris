@@ -14,6 +14,14 @@ use crate::model::Thread;
 
 const APPLICATION_ID: &str = "io.github.battlemountain2.Iris";
 
+fn send_desktop_notification(app: &adw::Application, id: Option<&str>, title: &str, body: &str) {
+    let notification = gio::Notification::new(title);
+    notification.set_body(Some(body));
+    let icon = gio::ThemedIcon::new("mail-unread-symbolic");
+    notification.set_icon(&icon);
+    app.send_notification(id, &notification);
+}
+
 fn main() -> glib::ExitCode {
     if let Err(error) = tracing_subscriber::fmt::try_init() {
         eprintln!("Unable to initialize logging: {error}");
@@ -68,6 +76,9 @@ fn build_ui(app: &adw::Application) {
     // Initialize Theme Manager (Noctalia, Greek themes, Subtle mode)
     let theme_manager = ui::ThemeManager::new();
 
+    // Load or seed user accounts from ~/.config/iris/config.toml
+    let iris_config = Rc::new(services::config::load_or_create_config());
+
     // Initialize Maildir Scanner & Seed Demo Emails if directory is empty
     let mail_root = get_mail_root();
     let scanner = Rc::new(services::MaildirScanner::new(mail_root.clone()));
@@ -81,11 +92,23 @@ fn build_ui(app: &adw::Application) {
         selected_thread: RefCell<Option<Thread>>,
     }
 
+    let initial_acct_dir = iris_config
+        .accounts
+        .first()
+        .and_then(|a| a.maildir_path.as_ref().map(PathBuf::from))
+        .unwrap_or_else(|| mail_root.join("demo"));
+    let initial_inbox = initial_acct_dir.join("INBOX");
+    let initial_title = iris_config
+        .accounts
+        .first()
+        .map(|a| a.display_name.clone())
+        .unwrap_or_else(|| "Inbox".to_string());
+
     let demo_account = mail_root.join("demo");
     let app_state = Rc::new(AppState {
         mail_root: mail_root.clone(),
-        current_folder: RefCell::new(demo_account.join("INBOX")),
-        current_title: RefCell::new("Inbox".to_string()),
+        current_folder: RefCell::new(initial_inbox),
+        current_title: RefCell::new(initial_title),
         selected_thread: RefCell::new(None),
     });
 
@@ -97,7 +120,7 @@ fn build_ui(app: &adw::Application) {
     outer_split.set_min_sidebar_width(180.0);
     outer_split.set_max_sidebar_width(240.0);
 
-    let sidebar_view = Rc::new(ui::SidebarView::new());
+    let sidebar_view = Rc::new(ui::SidebarView::with_accounts(&iris_config.accounts));
     let sidebar_page = adw::NavigationPage::builder()
         .title("Mailboxes")
         .tag("sidebar")
@@ -207,6 +230,7 @@ fn build_ui(app: &adw::Application) {
         let thread_view = thread_view.clone();
         let reading_view = reading_view.clone();
         let sidebar_view = sidebar_view.clone();
+        let iris_config = iris_config.clone();
 
         Rc::new(move || {
             let folder = state.current_folder.borrow().clone();
@@ -242,13 +266,18 @@ fn build_ui(app: &adw::Application) {
             }
 
             // Live Mailbox Counter updates across configured accounts
-            for acct_id in &["demo", "work", "icloud"] {
-                let acct_dir = state.mail_root.join(acct_id);
+            let mut total_unread = 0;
+            for (idx, acct) in iris_config.accounts.iter().enumerate() {
+                let acct_dir = acct
+                    .maildir_path
+                    .as_ref()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| state.mail_root.join(&acct.id));
                 let unread = scanner.count_unread_in_folder(&acct_dir.join("INBOX"));
-                sidebar_view.update_badge(&format!("account:{acct_id}"), unread);
+                sidebar_view.update_badge(&format!("account:{}", acct.id), unread);
+                total_unread += unread;
 
-                if *acct_id == "demo" {
-                    sidebar_view.update_badge("inbox", unread);
+                if idx == 0 {
                     let archive_count = scanner.count_total_in_folder(&acct_dir.join("Archive"));
                     let trash_count = scanner.count_total_in_folder(&acct_dir.join("Trash"));
                     let sent_count = scanner.count_total_in_folder(&acct_dir.join("Sent"));
@@ -257,6 +286,7 @@ fn build_ui(app: &adw::Application) {
                     sidebar_view.update_badge("folder:sent", sent_count);
                 }
             }
+            sidebar_view.update_badge("inbox", total_unread);
         })
     };
 
@@ -268,49 +298,56 @@ fn build_ui(app: &adw::Application) {
         let demo_account = demo_account.clone();
         let mail_root = mail_root.clone();
         let outer_split = outer_split.clone();
+        let cfg = iris_config.clone();
 
         sidebar_view.list_box.connect_row_selected(move |_list, row_opt| {
             let Some(row) = row_opt else { return; };
             let Some(id) = sidebar_view_ref.get_row_id(row) else { return; };
 
-            match id.as_str() {
-                "inbox" | "account:demo" => {
-                    *state.current_folder.borrow_mut() = demo_account.join("INBOX");
-                    *state.current_title.borrow_mut() = "Inbox".to_string();
+            if id == "inbox" {
+                let initial_dir = cfg
+                    .accounts
+                    .first()
+                    .and_then(|a| a.maildir_path.as_ref().map(PathBuf::from))
+                    .unwrap_or_else(|| mail_root.join("demo"));
+                *state.current_folder.borrow_mut() = initial_dir.join("INBOX");
+                *state.current_title.borrow_mut() = "All Inboxes".to_string();
+            } else if let Some(acct_id) = id.strip_prefix("account:") {
+                if let Some(acct) = cfg.accounts.iter().find(|a| a.id == acct_id) {
+                    let acct_dir = acct
+                        .maildir_path
+                        .as_ref()
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| mail_root.join(&acct.id));
+                    let inbox = acct_dir.join("INBOX");
+                    let _ = services::maildir::ensure_maildir_folder(&inbox);
+                    *state.current_folder.borrow_mut() = inbox;
+                    *state.current_title.borrow_mut() = acct.display_name.clone();
                 }
-                "account:work" => {
-                    let work_inbox = mail_root.join("work").join("INBOX");
-                    let _ = services::maildir::ensure_maildir_folder(&work_inbox);
-                    *state.current_folder.borrow_mut() = work_inbox;
-                    *state.current_title.borrow_mut() = "Gmail (Work)".to_string();
+            } else {
+                match id.as_str() {
+                    "folder:sent" => {
+                        *state.current_folder.borrow_mut() = demo_account.join("Sent");
+                        *state.current_title.borrow_mut() = "Sent".to_string();
+                    }
+                    "folder:archive" => {
+                        *state.current_folder.borrow_mut() = demo_account.join("Archive");
+                        *state.current_title.borrow_mut() = "Archive".to_string();
+                    }
+                    "folder:trash" => {
+                        *state.current_folder.borrow_mut() = demo_account.join("Trash");
+                        *state.current_title.borrow_mut() = "Trash".to_string();
+                    }
+                    "view:feed" => {
+                        *state.current_folder.borrow_mut() = demo_account.join("INBOX");
+                        *state.current_title.borrow_mut() = "Feed & Newsletters".to_string();
+                    }
+                    "view:flagged" => {
+                        *state.current_folder.borrow_mut() = demo_account.join("INBOX");
+                        *state.current_title.borrow_mut() = "Flagged".to_string();
+                    }
+                    _ => {}
                 }
-                "account:icloud" => {
-                    let icloud_inbox = mail_root.join("icloud").join("INBOX");
-                    let _ = services::maildir::ensure_maildir_folder(&icloud_inbox);
-                    *state.current_folder.borrow_mut() = icloud_inbox;
-                    *state.current_title.borrow_mut() = "iCloud".to_string();
-                }
-                "folder:sent" => {
-                    *state.current_folder.borrow_mut() = demo_account.join("Sent");
-                    *state.current_title.borrow_mut() = "Sent".to_string();
-                }
-                "folder:archive" => {
-                    *state.current_folder.borrow_mut() = demo_account.join("Archive");
-                    *state.current_title.borrow_mut() = "Archive".to_string();
-                }
-                "folder:trash" => {
-                    *state.current_folder.borrow_mut() = demo_account.join("Trash");
-                    *state.current_title.borrow_mut() = "Trash".to_string();
-                }
-                "view:feed" => {
-                    *state.current_folder.borrow_mut() = demo_account.join("INBOX");
-                    *state.current_title.borrow_mut() = "Feed & Newsletters".to_string();
-                }
-                "view:flagged" => {
-                    *state.current_folder.borrow_mut() = demo_account.join("INBOX");
-                    *state.current_title.borrow_mut() = "Flagged".to_string();
-                }
-                _ => {}
             }
             refresh_view();
             if outer_split.is_collapsed() {
@@ -326,8 +363,10 @@ fn build_ui(app: &adw::Application) {
     let win_send = window.clone();
     let mail_root_send = mail_root.clone();
     let refresh_send = refresh_view.clone();
+    let cfg_dispatch = iris_config.clone();
+    let app_for_send = app.clone();
 
-    let compose_dialog = Rc::new(ui::ComposeDialog::new(move |payload| {
+    let compose_dialog = Rc::new(ui::ComposeDialog::with_accounts(&iris_config.accounts, move |payload| {
         if payload.to.is_empty() {
             let toast = adw::Toast::builder()
                 .title("Cannot send: Recipient address is empty")
@@ -408,6 +447,8 @@ fn build_ui(app: &adw::Application) {
         let holder_dispatch = holder_for_send.clone();
         let win_dispatch = win_send.clone();
         let payload_err = payload.clone();
+        let cfg_dispatch = cfg_dispatch.clone();
+        let app_dispatch = app_for_send.clone();
 
         gtk::glib::timeout_add_local_once(std::time::Duration::from_secs(10), move || {
             if cancelled.get() {
@@ -419,14 +460,32 @@ fn build_ui(app: &adw::Application) {
                 "10s Undo window elapsed for {}. Dispatching transport...",
                 outbox_msg.id
             );
+
+            let matching_smtp = cfg_dispatch
+                .accounts
+                .iter()
+                .find(|a| a.id == outbox_msg.account_name)
+                .and_then(|acct| {
+                    acct.smtp_host.as_ref().map(|host| services::smtp::SmtpAccountConfig {
+                        id: acct.id.clone(),
+                        name: acct.display_name.clone(),
+                        email: acct.email.clone(),
+                        host: host.clone(),
+                        port: acct.smtp_port.unwrap_or(587),
+                        username: acct.smtp_username.clone().unwrap_or_else(|| acct.email.clone()),
+                        password: acct.smtp_password.clone(),
+                    })
+                });
+
             services::smtp::dispatch_in_background(
                 mail_root_dispatch,
                 outbox_msg,
-                None, // Local sent-recording fallback or configured SMTP
+                matching_smtp,
                 move |res| match res {
                     Ok(success_msg) => {
                         refresh_dispatch();
-                        let ok_toast = adw::Toast::builder().title(success_msg).timeout(4).build();
+                        send_desktop_notification(&app_dispatch, None, "Email Sent", &success_msg);
+                        let ok_toast = adw::Toast::builder().title(&success_msg).timeout(4).build();
                         toast_overlay_dispatch.add_toast(ok_toast);
                     }
                     Err(err) => {
@@ -473,6 +532,7 @@ fn build_ui(app: &adw::Application) {
         let mail_root = mail_root.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
+        let app_sync = app.clone();
         let is_syncing = Rc::new(Cell::new(false));
 
         sync_btn.clone().connect_clicked(move |_| {
@@ -489,6 +549,7 @@ fn build_ui(app: &adw::Application) {
             let sync_flag = is_syncing.clone();
             let toast_ov = toast_overlay.clone();
             let refresh = refresh_view.clone();
+            let app_notif = app_sync.clone();
 
             services::sync::run_sync_in_background(mail_root.clone(), move |res| {
                 sync_flag.set(false);
@@ -499,6 +560,7 @@ fn build_ui(app: &adw::Application) {
                 match res {
                     services::sync::SyncResult::SyncedRemote(msg) => {
                         refresh();
+                        send_desktop_notification(&app_notif, None, "Mailboxes Synced", &msg);
                         let toast = adw::Toast::builder()
                             .title(msg)
                             .timeout(3)

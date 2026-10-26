@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Iris
+GenericName=Email Client
+Comment=Ultra-fast, liquid-glass email client for Wayland & Hyprland
+Exec=iris
+Icon=io.github.battlemountain2.Iris
+Terminal=false
+Type=Application
+Categories=Network;Email;Office;
+Keywords=mail;email;client;wayland;hyprland;notmuch;maildir;
+StartupNotify=true
+StartupWMClass=io.github.battlemountain2.Iris
