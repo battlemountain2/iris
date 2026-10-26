@@ -126,6 +126,35 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   color: @theme_text;
 }
 
+/* Spark-Inspired Segment Filter Pills */
+.iris-filter-tabs {
+  background-color: alpha(@theme_text, 0.04);
+  border-radius: 8px;
+  padding: 2px;
+  border: 1px solid alpha(@theme_text, 0.06);
+}
+
+.iris-tab-btn {
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 6px;
+  min-height: 24px;
+  color: @theme_dim_text;
+  transition: all 120ms ease-out;
+}
+
+.iris-tab-btn:hover {
+  color: @theme_text;
+}
+
+.iris-tab-btn:checked {
+  background-color: @theme_surface;
+  color: @theme_text;
+  font-weight: 600;
+  box-shadow: 0 1px 3px alpha(#000000, 0.18);
+}
+
 /* Mimestream Typeset Message Rows */
 .iris-thread-card,
 .iris-message-row {

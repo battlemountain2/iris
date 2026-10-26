@@ -111,6 +111,7 @@ fn build_ui(app: &adw::Application) {
     inner_split.set_max_sidebar_width(340.0);
 
     let thread_view = Rc::new(ui::ThreadListView::new());
+    thread_view.setup_tab_handlers();
 
     // Hook up sidebar toggle button to outer split view
     let outer_split_ref = outer_split.clone();
@@ -122,17 +123,35 @@ fn build_ui(app: &adw::Application) {
     let reading_view = Rc::new(ui::ReadingPaneView::new());
     reading_view.set_toast_overlay(&toast_overlay);
 
+    // Adaptive Back Button on Narrow / Collapsed Layouts
+    {
+        let inner_split_back = inner_split.clone();
+        reading_view.back_btn.connect_clicked(move |_| {
+            inner_split_back.set_show_content(false);
+        });
+
+        let back_btn_clone = reading_view.back_btn.clone();
+        inner_split.connect_collapsed_notify(move |split| {
+            back_btn_clone.set_visible(split.is_collapsed());
+        });
+        reading_view.back_btn.set_visible(inner_split.is_collapsed());
+    }
+
     // Dynamic selection: clicking or j/k immediately updates authoritative state and reading view
     {
         let tv = thread_view.clone();
         let rv = reading_view.clone();
         let state = app_state.clone();
+        let inner_split_sel = inner_split.clone();
         thread_view.list_box.connect_row_selected(move |_list_box, row_opt| {
             if let Some(row) = row_opt {
                 let index = row.index() as usize;
                 if let Some(thread) = tv.get_thread_at_index(index) {
                     *state.selected_thread.borrow_mut() = Some(thread.clone());
                     rv.display_thread(&thread);
+                    if inner_split_sel.is_collapsed() {
+                        inner_split_sel.set_show_content(true);
+                    }
                 }
             } else {
                 *state.selected_thread.borrow_mut() = None;
@@ -248,6 +267,7 @@ fn build_ui(app: &adw::Application) {
         let refresh_view = refresh_view.clone();
         let demo_account = demo_account.clone();
         let mail_root = mail_root.clone();
+        let outer_split = outer_split.clone();
 
         sidebar_view.list_box.connect_row_selected(move |_list, row_opt| {
             let Some(row) = row_opt else { return; };
@@ -293,6 +313,9 @@ fn build_ui(app: &adw::Application) {
                 _ => {}
             }
             refresh_view();
+            if outer_split.is_collapsed() {
+                outer_split.set_show_content(true);
+            }
         });
     }
 
@@ -879,7 +902,19 @@ fn build_ui(app: &adw::Application) {
         palette_ref.present(&win_for_palette);
     });
 
-    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, a, f, s, u, /)
+    let do_back = {
+        let inner_split = inner_split.clone();
+        let outer_split = outer_split.clone();
+        Rc::new(move || {
+            if inner_split.is_collapsed() && inner_split.shows_content() {
+                inner_split.set_show_content(false);
+            } else if outer_split.is_collapsed() && outer_split.shows_content() {
+                outer_split.set_show_content(false);
+            }
+        })
+    };
+
+    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, a, f, s, u, /, Esc)
     let key_actions = ui::KeybindingActions {
         on_archive: do_archive,
         on_trash: do_trash,
@@ -889,6 +924,7 @@ fn build_ui(app: &adw::Application) {
         on_star: do_star,
         on_toggle_read: do_toggle_read,
         on_focus_search: do_focus_search,
+        on_back: do_back,
     };
 
     ui::setup_window_keybindings(

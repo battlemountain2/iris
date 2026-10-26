@@ -307,6 +307,33 @@ pub fn parse_maildir_flags(path: &Path) -> (bool, bool) {
 /// If a file with the destination name already exists, generates a collision-safe
 /// unique filename preserving the Maildir flags so existing mail is never overwritten.
 /// Returns `(original_path, destination_path)` on success.
+/// Strips `mbsync` UID parameters (`,U=\d+`) from a Maildir filename when moving across folders.
+/// This ensures `mbsync` does not attempt to map stale source folder UIDs into the destination folder,
+/// preventing sync rollbacks, UID mismatches, and data corruption.
+pub fn sanitize_filename_for_folder_move(file_name: &str) -> String {
+    if let Some((base_and_params, flags)) = file_name.split_once(":2,") {
+        let sanitized_base = strip_uid_param(base_and_params);
+        format!("{sanitized_base}:2,{flags}")
+    } else {
+        strip_uid_param(file_name)
+    }
+}
+
+fn strip_uid_param(s: &str) -> String {
+    if let Some(pos) = s.find(",U=") {
+        let after = &s[pos + 3..];
+        let end_idx = after
+            .find(|c: char| !c.is_ascii_digit())
+            .map(|i| pos + 3 + i)
+            .unwrap_or(s.len());
+        let mut result = s[..pos].to_string();
+        result.push_str(&s[end_idx..]);
+        result
+    } else {
+        s.to_string()
+    }
+}
+
 pub fn move_message_to_folder(
     file_path: &Path,
     target_folder: &Path,
@@ -321,12 +348,14 @@ pub fn move_message_to_folder(
             .map_err(|e| format!("Failed to create folder {}: {e}", cur_dir.display()))?;
     }
 
-    let file_name = file_path
+    let raw_file_name = file_path
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| "Invalid file name".to_string())?;
 
-    let mut dest_path = cur_dir.join(file_name);
+    let file_name = sanitize_filename_for_folder_move(raw_file_name);
+
+    let mut dest_path = cur_dir.join(&file_name);
     if file_path == dest_path {
         return Ok((file_path.to_path_buf(), dest_path));
     }
@@ -1164,5 +1193,23 @@ Got it, testing now!\r\n";
         assert_eq!(reply_msg.attachments.len(), 0, "Reply message has 0 attachments");
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_sanitize_filename_for_folder_move_strips_mbsync_uid() {
+        // Standard mbsync filename with UID
+        let orig = "1697812345.12345_1.myhost,U=42:2,S";
+        let sanitized = sanitize_filename_for_folder_move(orig);
+        assert_eq!(sanitized, "1697812345.12345_1.myhost:2,S");
+
+        // With multiple parameters before flags
+        let orig_multi = "1697812345.12345_1.myhost,S=1234,U=999:2,FS";
+        let sanitized_multi = sanitize_filename_for_folder_move(orig_multi);
+        assert_eq!(sanitized_multi, "1697812345.12345_1.myhost,S=1234:2,FS");
+
+        // Filename without UID remains intact
+        let without_uid = "1697812345.12345_1.myhost:2,S";
+        let sanitized_no_uid = sanitize_filename_for_folder_move(without_uid);
+        assert_eq!(sanitized_no_uid, without_uid);
     }
 }

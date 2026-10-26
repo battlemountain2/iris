@@ -10,6 +10,7 @@ use crate::services::html_renderer::render_body_markup;
 
 pub struct ReadingPaneView {
     pub container: gtk::Box,
+    pub back_btn: gtk::Button,
     pub archive_btn: gtk::Button,
     pub trash_btn: gtk::Button,
     pub reply_btn: gtk::Button,
@@ -32,8 +33,15 @@ impl ReadingPaneView {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         container.add_css_class("iris-reading-pane");
 
-        // Action Headerbar (Archive, Trash, Reply, Star)
+        // Action Headerbar (Back, Archive, Trash, Forward, Reply All, Reply, Star)
         let header = adw::HeaderBar::new();
+
+        let back_btn = gtk::Button::builder()
+            .icon_name("go-previous-symbolic")
+            .tooltip_text("Back to Inbox (Esc)")
+            .build();
+        back_btn.add_css_class("flat");
+        header.pack_start(&back_btn);
 
         let archive_btn = gtk::Button::builder()
             .icon_name("mail-archive-symbolic")
@@ -125,6 +133,7 @@ impl ReadingPaneView {
 
         Self {
             container,
+            back_btn,
             archive_btn,
             trash_btn,
             reply_btn,
@@ -178,8 +187,9 @@ impl ReadingPaneView {
         if chronological_msgs.len() > 1 {
             for (i, msg) in chronological_msgs.iter().enumerate() {
                 let s_name = parse_display_name(&msg.from);
+                let local_time = msg.date.with_timezone(&chrono::Local).format("%-I:%M %p");
                 let pill = gtk::Label::builder()
-                    .label(format!("● {} ({})", s_name, msg.date.format("%H:%M")))
+                    .label(format!("● {} ({local_time})", s_name))
                     .build();
                 pill.add_css_class("caption");
                 pill.add_css_class("badge");
@@ -268,7 +278,8 @@ fn build_conversation_card(
     name_label.add_css_class(if is_latest { "heading" } else { "body" });
     top_row.append(&name_label);
 
-    let date_str = message.date.format("%b %d, %Y at %H:%M").to_string();
+    let local_dt = message.date.with_timezone(&chrono::Local);
+    let date_str = local_dt.format("%b %-d, %Y at %-I:%M %p").to_string();
     let date_label = gtk::Label::builder()
         .label(&date_str)
         .xalign(1.0)

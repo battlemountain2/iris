@@ -19,6 +19,7 @@ pub struct KeybindingActions {
     pub on_star: Rc<dyn Fn()>,
     pub on_toggle_read: Rc<dyn Fn()>,
     pub on_focus_search: Rc<dyn Fn()>,
+    pub on_back: Rc<dyn Fn()>,
 }
 
 pub fn setup_window_keybindings(
@@ -108,6 +109,11 @@ pub fn setup_window_keybindings(
             // '/' -> Focus thread search
             Key::slash => {
                 (actions_clone.on_focus_search)();
+                glib::Propagation::Stop
+            }
+            // Escape or BackSpace -> Back navigation / deselect
+            Key::Escape | Key::BackSpace => {
+                (actions_clone.on_back)();
                 glib::Propagation::Stop
             }
             _ => glib::Propagation::Proceed,
