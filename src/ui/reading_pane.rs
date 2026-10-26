@@ -13,6 +13,8 @@ pub struct ReadingPaneView {
     pub archive_btn: gtk::Button,
     pub trash_btn: gtk::Button,
     pub reply_btn: gtk::Button,
+    pub reply_all_btn: gtk::Button,
+    pub forward_btn: gtk::Button,
     pub star_btn: gtk::Button,
     pub subject_label: gtk::Label,
     pub privacy_banner: gtk::Box,
@@ -46,6 +48,20 @@ impl ReadingPaneView {
             .build();
         trash_btn.add_css_class("flat");
         header.pack_end(&trash_btn);
+
+        let forward_btn = gtk::Button::builder()
+            .icon_name("mail-forward-symbolic")
+            .tooltip_text("Forward (f)")
+            .build();
+        forward_btn.add_css_class("flat");
+        header.pack_end(&forward_btn);
+
+        let reply_all_btn = gtk::Button::builder()
+            .icon_name("mail-reply-all-symbolic")
+            .tooltip_text("Reply All (a)")
+            .build();
+        reply_all_btn.add_css_class("flat");
+        header.pack_end(&reply_all_btn);
 
         let reply_btn = gtk::Button::builder()
             .icon_name("mail-reply-sender-symbolic")
@@ -112,6 +128,8 @@ impl ReadingPaneView {
             archive_btn,
             trash_btn,
             reply_btn,
+            reply_all_btn,
+            forward_btn,
             star_btn,
             subject_label,
             privacy_banner,

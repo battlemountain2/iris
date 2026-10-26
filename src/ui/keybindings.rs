@@ -14,6 +14,8 @@ pub struct KeybindingActions {
     pub on_archive: Rc<dyn Fn()>,
     pub on_trash: Rc<dyn Fn()>,
     pub on_reply: Rc<dyn Fn()>,
+    pub on_reply_all: Rc<dyn Fn()>,
+    pub on_forward: Rc<dyn Fn()>,
     pub on_star: Rc<dyn Fn()>,
     pub on_toggle_read: Rc<dyn Fn()>,
     pub on_focus_search: Rc<dyn Fn()>,
@@ -81,6 +83,16 @@ pub fn setup_window_keybindings(
             // 'r' -> Reply
             Key::r => {
                 (actions_clone.on_reply)();
+                glib::Propagation::Stop
+            }
+            // 'a' -> Reply All
+            Key::a => {
+                (actions_clone.on_reply_all)();
+                glib::Propagation::Stop
+            }
+            // 'f' -> Forward
+            Key::f => {
+                (actions_clone.on_forward)();
                 glib::Propagation::Stop
             }
             // 's' -> Star

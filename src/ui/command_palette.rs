@@ -61,6 +61,24 @@ const ACTIONS: &[PaletteAction] = &[
         id: "nav_archive",
     },
     PaletteAction {
+        title: "Reply to Sender",
+        category: "Message",
+        shortcut: Some("r"),
+        id: "reply",
+    },
+    PaletteAction {
+        title: "Reply All",
+        category: "Message",
+        shortcut: Some("a"),
+        id: "reply_all",
+    },
+    PaletteAction {
+        title: "Forward Message",
+        category: "Message",
+        shortcut: Some("f"),
+        id: "forward",
+    },
+    PaletteAction {
         title: "Archive Selected Message",
         category: "Message",
         shortcut: Some("e"),

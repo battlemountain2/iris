@@ -625,6 +625,118 @@ fn build_ui(app: &adw::Application) {
         })
     };
 
+    let do_reply_all = {
+        let state = app_state.clone();
+        let compose_dialog = compose_dialog.clone();
+        let win = window.clone();
+
+        Rc::new(move || {
+            let thread_opt = state.selected_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                let latest_msg = thread.messages.last();
+                let sender = latest_msg
+                    .and_then(|m| m.reply_to.clone())
+                    .or_else(|| latest_msg.map(|m| m.from.clone()))
+                    .or_else(|| thread.senders.first().cloned())
+                    .unwrap_or_default();
+                let body = latest_msg.and_then(|m| m.body_plain.clone()).unwrap_or_default();
+
+                let folder_str = state.current_folder.borrow().to_string_lossy().to_string();
+                let account_id = if folder_str.contains("/work/") {
+                    "work"
+                } else if folder_str.contains("/icloud/") {
+                    "icloud"
+                } else {
+                    "demo"
+                };
+
+                let user_emails = ["bry@gmail.com", "brayan@work.com", "brayan@icloud.com"];
+                let empty_vec = Vec::new();
+                let to_addrs = latest_msg.map(|m| &m.to).unwrap_or(&empty_vec);
+                let cc_addrs = latest_msg.map(|m| &m.cc).unwrap_or(&empty_vec);
+                let reply_to_ref = latest_msg.and_then(|m| m.reply_to.as_deref());
+
+                let recipients = ui::compose::filter_reply_all_recipients(
+                    reply_to_ref,
+                    &sender,
+                    to_addrs,
+                    cc_addrs,
+                    &user_emails,
+                );
+
+                let to_field = recipients.join(", ");
+
+                let in_reply_to = latest_msg.map(|m| m.id.clone());
+                let mut references = latest_msg.map(|m| m.references.clone()).unwrap_or_default();
+                if let Some(ref mid) = in_reply_to {
+                    if !references.contains(mid) {
+                        references.push(mid.clone());
+                    }
+                }
+
+                compose_dialog.present_reply(
+                    &win,
+                    &to_field,
+                    &thread.subject,
+                    &body,
+                    in_reply_to,
+                    references,
+                    Some(account_id),
+                );
+            } else {
+                compose_dialog.present(&win);
+            }
+        })
+    };
+
+    let do_forward = {
+        let state = app_state.clone();
+        let compose_dialog = compose_dialog.clone();
+        let win = window.clone();
+
+        Rc::new(move || {
+            let thread_opt = state.selected_thread.borrow().clone();
+            if let Some(thread) = thread_opt {
+                let latest_msg = thread.messages.last();
+                let from = latest_msg
+                    .map(|m| m.from.clone())
+                    .or_else(|| thread.senders.first().cloned())
+                    .unwrap_or_default();
+
+                let date_str = latest_msg
+                    .map(|m| m.date.format("%a, %b %-d, %Y at %-I:%M %p UTC").to_string())
+                    .unwrap_or_else(|| "Unknown date".to_string());
+
+                let to_str = latest_msg
+                    .map(|m| m.to.join(", "))
+                    .unwrap_or_default();
+
+                let body = latest_msg.and_then(|m| m.body_plain.clone()).unwrap_or_default();
+
+                let folder_str = state.current_folder.borrow().to_string_lossy().to_string();
+                let account_id = if folder_str.contains("/work/") {
+                    "work"
+                } else if folder_str.contains("/icloud/") {
+                    "icloud"
+                } else {
+                    "demo"
+                };
+
+                compose_dialog.present_forward(
+                    &win,
+                    &thread.subject,
+                    &from,
+                    &date_str,
+                    &to_str,
+                    &body,
+                    Some(account_id),
+                );
+            } else {
+                compose_dialog.present(&win);
+            }
+        })
+    };
+
     let do_star = {
         let state = app_state.clone();
         let refresh_view = refresh_view.clone();
@@ -680,6 +792,18 @@ fn build_ui(app: &adw::Application) {
         });
     }
     {
+        let do_reply_all = do_reply_all.clone();
+        reading_view.reply_all_btn.connect_clicked(move |_| {
+            do_reply_all();
+        });
+    }
+    {
+        let do_forward = do_forward.clone();
+        reading_view.forward_btn.connect_clicked(move |_| {
+            do_forward();
+        });
+    }
+    {
         let do_star = do_star.clone();
         reading_view.star_btn.connect_clicked(move |_| {
             do_star();
@@ -725,6 +849,9 @@ fn build_ui(app: &adw::Application) {
         let win = window.clone();
         let do_archive = do_archive.clone();
         let do_trash = do_trash.clone();
+        let do_reply = do_reply.clone();
+        let do_reply_all = do_reply_all.clone();
+        let do_forward = do_forward.clone();
         let do_star = do_star.clone();
 
         Rc::new(ui::CommandPalette::with_action_handler(
@@ -735,6 +862,9 @@ fn build_ui(app: &adw::Application) {
                 "nav_sent" => sidebar_view.select_folder("folder:sent"),
                 "nav_archive" => sidebar_view.select_folder("folder:archive"),
                 "nav_feed" => sidebar_view.select_folder("view:feed"),
+                "reply" => do_reply(),
+                "reply_all" => do_reply_all(),
+                "forward" => do_forward(),
                 "archive" => do_archive(),
                 "trash" => do_trash(),
                 "star" => do_star(),
@@ -749,11 +879,13 @@ fn build_ui(app: &adw::Application) {
         palette_ref.present(&win_for_palette);
     });
 
-    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, s, u, /)
+    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, a, f, s, u, /)
     let key_actions = ui::KeybindingActions {
         on_archive: do_archive,
         on_trash: do_trash,
         on_reply: do_reply,
+        on_reply_all: do_reply_all,
+        on_forward: do_forward,
         on_star: do_star,
         on_toggle_read: do_toggle_read,
         on_focus_search: do_focus_search,

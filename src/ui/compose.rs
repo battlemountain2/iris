@@ -283,6 +283,40 @@ impl ComposeDialog {
         self.body_view.grab_focus();
     }
 
+    pub fn present_forward(
+        &self,
+        parent: &impl IsA<gtk::Widget>,
+        subject: &str,
+        from: &str,
+        date_str: &str,
+        to_str: &str,
+        original_body: &str,
+        account_id: Option<&str>,
+    ) {
+        self.to_entry.set_text("");
+        let fwd_subject = if subject.to_lowercase().starts_with("fwd:") {
+            subject.to_string()
+        } else {
+            format!("Fwd: {subject}")
+        };
+        self.subject_entry.set_text(&fwd_subject);
+
+        let body_content = format_forward_body(from, date_str, subject, to_str, original_body);
+        self.body_view.buffer().set_text(&body_content);
+
+        *self.in_reply_to.borrow_mut() = None;
+        self.references.borrow_mut().clear();
+
+        if let Some(acct) = account_id {
+            if let Some(pos) = CONFIGURED_ACCOUNTS.iter().position(|a| a.id == acct) {
+                self.from_dropdown.set_selected(pos as u32);
+            }
+        }
+
+        self.dialog.present(Some(parent));
+        self.to_entry.grab_focus();
+    }
+
     pub fn reopen_draft(
         &self,
         parent: &impl IsA<gtk::Widget>,
@@ -300,5 +334,105 @@ impl ComposeDialog {
 
         self.dialog.present(Some(parent));
         self.body_view.grab_focus();
+    }
+}
+
+/// Extracts reply-all recipients, honoring Reply-To, To, and Cc while excluding own accounts.
+pub fn filter_reply_all_recipients(
+    reply_to: Option<&str>,
+    from: &str,
+    to: &[String],
+    cc: &[String],
+    user_emails: &[&str],
+) -> Vec<String> {
+    let sender = reply_to.unwrap_or(from).trim();
+    let mut recipients = Vec::new();
+
+    let sender_lower = sender.to_lowercase();
+    if !sender.is_empty() && !user_emails.iter().any(|u| sender_lower.contains(u)) {
+        recipients.push(sender.to_string());
+    }
+
+    for addr in to.iter().chain(cc.iter()) {
+        let addr_trim = addr.trim();
+        let addr_lower = addr_trim.to_lowercase();
+        if !addr_trim.is_empty()
+            && !user_emails.iter().any(|u| addr_lower.contains(u))
+            && !recipients.iter().any(|r| r.to_lowercase() == addr_lower)
+        {
+            recipients.push(addr_trim.to_string());
+        }
+    }
+
+    if recipients.is_empty() && !sender.is_empty() {
+        recipients.push(sender.to_string());
+    }
+
+    recipients
+}
+
+/// Formats standard forwarded message body block.
+pub fn format_forward_body(
+    from: &str,
+    date_str: &str,
+    subject: &str,
+    to_str: &str,
+    original_body: &str,
+) -> String {
+    format!(
+        "\n\n---------- Forwarded message ---------\nFrom: {from}\nDate: {date_str}\nSubject: {subject}\nTo: {to_str}\n\n{original_body}"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_reply_all_recipients_excludes_user_emails() {
+        let user_emails = ["bry@gmail.com", "brayan@work.com", "brayan@icloud.com"];
+        let from = "alex@hermes.dev";
+        let to = vec![
+            "bry@gmail.com".to_string(),
+            "elena@noctalia.org".to_string(),
+        ];
+        let cc = vec![
+            "brayan@work.com".to_string(),
+            "dev@omarchy.org".to_string(),
+        ];
+
+        let recipients = filter_reply_all_recipients(None, from, &to, &cc, &user_emails);
+        assert_eq!(recipients, vec![
+            "alex@hermes.dev",
+            "elena@noctalia.org",
+            "dev@omarchy.org",
+        ]);
+    }
+
+    #[test]
+    fn test_filter_reply_all_honors_reply_to() {
+        let user_emails = ["bry@gmail.com"];
+        let from = "notifications@service.com";
+        let reply_to = Some("support@service.com");
+        let to = vec!["bry@gmail.com".to_string()];
+        let cc = vec![];
+
+        let recipients = filter_reply_all_recipients(reply_to, from, &to, &cc, &user_emails);
+        assert_eq!(recipients, vec!["support@service.com"]);
+    }
+
+    #[test]
+    fn test_format_forward_body() {
+        let output = format_forward_body(
+            "alex@hermes.dev",
+            "Mon, Oct 25, 2026 at 10:30 AM",
+            "Project Update",
+            "team@hermes.dev",
+            "All systems nominal.",
+        );
+        assert!(output.contains("---------- Forwarded message ---------"));
+        assert!(output.contains("From: alex@hermes.dev"));
+        assert!(output.contains("Subject: Project Update"));
+        assert!(output.contains("All systems nominal."));
     }
 }
