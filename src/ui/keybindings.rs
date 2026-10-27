@@ -26,6 +26,8 @@ pub struct KeybindingActions {
     pub on_settings: Rc<dyn Fn()>,
     pub on_undo: Rc<dyn Fn()>,
     pub on_nav_folder: Rc<dyn Fn(&str)>,
+    pub on_toggle_select: Rc<dyn Fn()>,
+    pub on_select_all: Rc<dyn Fn()>,
 }
 
 pub fn setup_window_keybindings(
@@ -73,6 +75,12 @@ pub fn setup_window_keybindings(
         // Ctrl+Z: Undo last triage action
         if modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) && (key == Key::z || key == Key::Z) {
             (actions_clone.on_undo)();
+            return glib::Propagation::Stop;
+        }
+
+        // Ctrl+A: Select all visible threads (when not typing in entry or textview)
+        if !is_text_input && modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) && (key == Key::a || key == Key::A) {
+            (actions_clone.on_select_all)();
             return glib::Propagation::Stop;
         }
 
@@ -134,6 +142,11 @@ pub fn setup_window_keybindings(
         }
 
         match key {
+            // 'x' -> Toggle selection of current thread for batch actions
+            Key::x => {
+                (actions_clone.on_toggle_select)();
+                glib::Propagation::Stop
+            }
             // 'z' -> Undo
             Key::z => {
                 (actions_clone.on_undo)();
@@ -248,6 +261,8 @@ mod tests {
         let inv3 = invoked.clone();
         let inv4 = invoked.clone();
         let inv5 = invoked.clone();
+        let inv6 = invoked.clone();
+        let inv7 = invoked.clone();
 
         let actions = KeybindingActions {
             on_archive: Rc::new(move || inv1.store(true, Ordering::SeqCst)),
@@ -264,6 +279,8 @@ mod tests {
             on_settings: Rc::new(move || inv5.store(true, Ordering::SeqCst)),
             on_undo: Rc::new(move || inv4.store(true, Ordering::SeqCst)),
             on_nav_folder: Rc::new(|_| {}),
+            on_toggle_select: Rc::new(move || inv6.store(true, Ordering::SeqCst)),
+            on_select_all: Rc::new(move || inv7.store(true, Ordering::SeqCst)),
         };
 
         (actions.on_archive)();
@@ -283,6 +300,14 @@ mod tests {
 
         invoked.store(false, Ordering::SeqCst);
         (actions.on_undo)();
+        assert!(invoked.load(Ordering::SeqCst));
+
+        invoked.store(false, Ordering::SeqCst);
+        (actions.on_toggle_select)();
+        assert!(invoked.load(Ordering::SeqCst));
+
+        invoked.store(false, Ordering::SeqCst);
+        (actions.on_select_all)();
         assert!(invoked.load(Ordering::SeqCst));
     }
 }

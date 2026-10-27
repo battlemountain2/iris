@@ -31,6 +31,7 @@ pub struct ThreadListView {
     pub tab_unread_btn: gtk::ToggleButton,
     pub all_threads: RefCell<Vec<Thread>>,
     pub visible_threads: RefCell<Vec<Thread>>,
+    pub selected_thread_ids: Rc<RefCell<std::collections::HashSet<String>>>,
     pub swipe_archive_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
     pub swipe_trash_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
 }
@@ -157,6 +158,7 @@ impl ThreadListView {
 
         let all_threads = RefCell::new(Vec::new());
         let visible_threads = RefCell::new(Vec::new());
+        let selected_thread_ids = Rc::new(RefCell::new(std::collections::HashSet::new()));
         let swipe_archive_cb = RefCell::new(None);
         let swipe_trash_cb = RefCell::new(None);
         let filter_tab = Cell::new(FilterTab::All);
@@ -176,6 +178,7 @@ impl ThreadListView {
             tab_unread_btn,
             all_threads,
             visible_threads,
+            selected_thread_ids,
             swipe_archive_cb,
             swipe_trash_cb,
         };
@@ -257,6 +260,89 @@ impl ThreadListView {
         self.visible_threads.borrow().clone()
     }
 
+    /// Returns true if one or more threads are currently selected in multi-select mode.
+    pub fn is_multi_select(&self) -> bool {
+        !self.selected_thread_ids.borrow().is_empty()
+    }
+
+    /// Returns a list of all currently multi-selected threads.
+    pub fn get_selected_threads(&self) -> Vec<Thread> {
+        let sel = self.selected_thread_ids.borrow();
+        self.visible_threads
+            .borrow()
+            .iter()
+            .filter(|t| sel.contains(&t.id))
+            .cloned()
+            .collect()
+    }
+
+    /// Toggles multi-selection for the currently focused row in the list box.
+    pub fn toggle_current_selection(&self) {
+        if let Some(row) = self.list_box.selected_row() {
+            let idx = row.index() as usize;
+            if let Some(thread) = self.get_thread_at_index(idx) {
+                let mut sel = self.selected_thread_ids.borrow_mut();
+                if sel.contains(&thread.id) {
+                    sel.remove(&thread.id);
+                } else {
+                    sel.insert(thread.id.clone());
+                }
+                drop(sel);
+                self.update_row_visuals();
+            }
+        }
+    }
+
+    /// Selects all currently visible threads in the list box.
+    pub fn select_all(&self) {
+        let mut sel = self.selected_thread_ids.borrow_mut();
+        for t in self.visible_threads.borrow().iter() {
+            sel.insert(t.id.clone());
+        }
+        drop(sel);
+        self.update_row_visuals();
+    }
+
+    /// Clears multi-selection and restores normal list subtitle.
+    pub fn clear_selection(&self) {
+        self.selected_thread_ids.borrow_mut().clear();
+        self.update_row_visuals();
+    }
+
+    /// Synchronizes CSS classes and subtitle to reflect active multi-selection.
+    pub fn update_row_visuals(&self) {
+        let sel = self.selected_thread_ids.borrow();
+        let sel_count = sel.len();
+        let visible = self.visible_threads.borrow();
+        for (idx, thread) in visible.iter().enumerate() {
+            if let Some(row) = self.list_box.row_at_index(idx as i32) {
+                if sel.contains(&thread.id) {
+                    row.add_css_class("iris-row-multiselected");
+                } else {
+                    row.remove_css_class("iris-row-multiselected");
+                }
+            }
+        }
+        if sel_count > 0 {
+            self.title.set_subtitle(&format!("{sel_count} selected"));
+        } else {
+            let q = self.search_entry.text();
+            let active_tab = self.filter_tab.get();
+            let unread_count = visible.iter().filter(|t| t.is_unread).count();
+            if q.is_empty() {
+                let tab_label = match active_tab {
+                    FilterTab::All => format!("{unread_count} unread"),
+                    FilterTab::Personal => format!("{} personal", visible.len()),
+                    FilterTab::Newsletters => format!("{} newsletters", visible.len()),
+                    FilterTab::Unread => format!("{unread_count} unread"),
+                };
+                self.title.set_subtitle(&tab_label);
+            } else {
+                self.title.set_subtitle(&format!("{} matching", visible.len()));
+            }
+        }
+    }
+
     /// Selects the row at the given index and gives it focus.
     pub fn select_index(&self, index: usize) {
         if let Some(row) = self.list_box.row_at_index(index as i32) {
@@ -268,6 +354,7 @@ impl ThreadListView {
     /// Sets the full list of threads for the current folder and applies active search filter.
     pub fn set_threads(&self, threads: &[Thread]) {
         *self.all_threads.borrow_mut() = threads.to_vec();
+        self.selected_thread_ids.borrow_mut().clear();
         self.apply_filter(&self.search_entry.text());
     }
 
@@ -307,7 +394,10 @@ impl ThreadListView {
         }
 
         let unread_count = filtered.iter().filter(|t| t.is_unread).count();
-        if q.is_empty() {
+        let sel_count = self.selected_thread_ids.borrow().len();
+        if sel_count > 0 {
+            self.title.set_subtitle(&format!("{sel_count} selected"));
+        } else if q.is_empty() {
             let tab_label = match active_tab {
                 FilterTab::All => format!("{unread_count} unread"),
                 FilterTab::Personal => format!("{} personal", filtered.len()),
@@ -356,6 +446,7 @@ impl ThreadListView {
 
         let archive_cb = self.swipe_archive_cb.borrow().clone();
         let trash_cb = self.swipe_trash_cb.borrow().clone();
+        let sel_ids = self.selected_thread_ids.borrow();
 
         for thread in &filtered {
             let sender = thread
@@ -365,6 +456,7 @@ impl ThreadListView {
                 .unwrap_or("Unknown");
             let date_str = format_human_timestamp(&thread.latest_timestamp);
             let has_attachment = thread.messages.iter().any(|m| !m.attachments.is_empty());
+            let is_selected = sel_ids.contains(&thread.id);
 
             let row = create_thread_card(
                 thread,
@@ -375,6 +467,7 @@ impl ThreadListView {
                 thread.is_unread,
                 thread.is_flagged,
                 has_attachment,
+                is_selected,
                 archive_cb.clone(),
                 trash_cb.clone(),
             );
@@ -446,11 +539,15 @@ fn create_thread_card(
     is_unread: bool,
     is_flagged: bool,
     has_attachment: bool,
+    is_multiselected: bool,
     on_archive: Option<Rc<dyn Fn(Thread)>>,
     on_trash: Option<Rc<dyn Fn(Thread)>>,
 ) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.add_css_class("iris-message-row");
+    if is_multiselected {
+        row.add_css_class("iris-row-multiselected");
+    }
 
     // Gesture controller for two-finger trackpad horizontal pan and mouse drag-swipe
     let gesture = gtk::GestureDrag::new();

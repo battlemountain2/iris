@@ -223,6 +223,9 @@ fn build_ui(app: &adw::Application) {
     toast_overlay.set_child(Some(&outer_split));
     window.set_content(Some(&toast_overlay));
 
+    // Holder for ComposeDialog so refresh_view can dynamically populate contact autocompletion
+    let compose_holder: Rc<RefCell<Option<Rc<ui::ComposeDialog>>>> = Rc::new(RefCell::new(None));
+
     // Reactive Refresh Helper: Rescans active folder, updates thread list & live counters
     let refresh_view: Rc<dyn Fn()> = {
         let scanner = scanner.clone();
@@ -231,6 +234,7 @@ fn build_ui(app: &adw::Application) {
         let reading_view = reading_view.clone();
         let sidebar_view = sidebar_view.clone();
         let iris_config = iris_config.clone();
+        let compose_holder_refresh = compose_holder.clone();
 
         Rc::new(move || {
             let folder = state.current_folder.borrow().clone();
@@ -242,6 +246,12 @@ fn build_ui(app: &adw::Application) {
 
             let threads = scanner.scan_folder(&folder);
             thread_view.set_threads(&threads);
+
+            // Update contact autocompletion in compose dialog from scanned threads
+            if let Some(ref dlg) = *compose_holder_refresh.borrow() {
+                let contacts = services::contact::extract_contacts_from_threads(&threads);
+                dlg.update_contacts(&contacts);
+            }
 
             let visible = thread_view.get_visible_threads();
             if visible.is_empty() {
@@ -365,7 +375,6 @@ fn build_ui(app: &adw::Application) {
     }
 
     // Compose View & Durable Delayed Outbox Queue (10s Undo Send)
-    let compose_holder: Rc<RefCell<Option<Rc<ui::ComposeDialog>>>> = Rc::new(RefCell::new(None));
     let holder_for_send = compose_holder.clone();
     let toast_overlay_send = toast_overlay.clone();
     let win_send = window.clone();
@@ -545,6 +554,9 @@ fn build_ui(app: &adw::Application) {
 
     compose_dialog.set_drafts_dir(demo_account.join("Drafts"));
     *compose_holder.borrow_mut() = Some(compose_dialog.clone());
+
+    let initial_contacts = services::contact::extract_contacts_from_threads(&scanner.scan_folder(&demo_account.join("INBOX")));
+    compose_dialog.update_contacts(&initial_contacts);
 
     let compose_ref = compose_dialog.clone();
     let win_for_compose = window.clone();
@@ -729,8 +741,47 @@ fn build_ui(app: &adw::Application) {
     let do_archive = {
         let state = app_state.clone();
         let archive_fn = archive_thread_fn.clone();
+        let thread_view = thread_view.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+        let last_undo = last_undo.clone();
         Rc::new(move || {
-            if let Some(thread) = state.selected_thread.borrow().clone() {
+            if thread_view.is_multi_select() {
+                let selected = thread_view.get_selected_threads();
+                if selected.is_empty() {
+                    return;
+                }
+                let count = selected.len();
+                let folder = state.current_folder.borrow().clone();
+                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+                let mut all_moves = Vec::new();
+                for t in &selected {
+                    if let Ok(moves) = services::maildir::archive_thread(t, &account_fallback) {
+                        all_moves.extend(moves);
+                    }
+                }
+                thread_view.clear_selection();
+                refresh_view();
+
+                let refresh_undo = refresh_view.clone();
+                let undo_action: Rc<dyn Fn()> = Rc::new(move || {
+                    if let Err(e) = services::maildir::restore_moved_files(&all_moves) {
+                        tracing::error!("Failed to undo batch archive: {e}");
+                    } else {
+                        tracing::info!("Restored {count} archived threads");
+                        refresh_undo();
+                    }
+                });
+                last_undo.replace(Some(undo_action.clone()));
+                let undo_toast = undo_action.clone();
+                ui::show_undo_action_toast(
+                    &toast_overlay,
+                    &format!("Archived {count} conversations"),
+                    move || {
+                        undo_toast();
+                    },
+                );
+            } else if let Some(thread) = state.selected_thread.borrow().clone() {
                 archive_fn(thread);
             }
         })
@@ -781,8 +832,47 @@ fn build_ui(app: &adw::Application) {
     let do_trash = {
         let state = app_state.clone();
         let trash_fn = trash_thread_fn.clone();
+        let thread_view = thread_view.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+        let last_undo = last_undo.clone();
         Rc::new(move || {
-            if let Some(thread) = state.selected_thread.borrow().clone() {
+            if thread_view.is_multi_select() {
+                let selected = thread_view.get_selected_threads();
+                if selected.is_empty() {
+                    return;
+                }
+                let count = selected.len();
+                let folder = state.current_folder.borrow().clone();
+                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+                let mut all_moves = Vec::new();
+                for t in &selected {
+                    if let Ok(moves) = services::maildir::trash_thread(t, &account_fallback) {
+                        all_moves.extend(moves);
+                    }
+                }
+                thread_view.clear_selection();
+                refresh_view();
+
+                let refresh_undo = refresh_view.clone();
+                let undo_action: Rc<dyn Fn()> = Rc::new(move || {
+                    if let Err(e) = services::maildir::restore_moved_files(&all_moves) {
+                        tracing::error!("Failed to undo batch trash: {e}");
+                    } else {
+                        tracing::info!("Restored {count} trashed threads");
+                        refresh_undo();
+                    }
+                });
+                last_undo.replace(Some(undo_action.clone()));
+                let undo_toast = undo_action.clone();
+                ui::show_undo_action_toast(
+                    &toast_overlay,
+                    &format!("Deleted {count} conversations"),
+                    move || {
+                        undo_toast();
+                    },
+                );
+            } else if let Some(thread) = state.selected_thread.borrow().clone() {
                 trash_fn(thread);
             }
         })
@@ -973,10 +1063,16 @@ fn build_ui(app: &adw::Application) {
 
     let do_star = {
         let state = app_state.clone();
+        let thread_view = thread_view.clone();
         let refresh_view = refresh_view.clone();
         Rc::new(move || {
-            let thread_opt = state.selected_thread.borrow().clone();
-            if let Some(thread) = thread_opt {
+            if thread_view.is_multi_select() {
+                let selected = thread_view.get_selected_threads();
+                for t in &selected {
+                    let _ = services::maildir::toggle_thread_flag(t);
+                }
+                refresh_view();
+            } else if let Some(thread) = state.selected_thread.borrow().clone() {
                 if let Ok(new_flag) = services::maildir::toggle_thread_flag(&thread) {
                     tracing::info!("Thread flag toggled: is_flagged={new_flag}");
                     refresh_view();
@@ -987,10 +1083,16 @@ fn build_ui(app: &adw::Application) {
 
     let do_toggle_read = {
         let state = app_state.clone();
+        let thread_view = thread_view.clone();
         let refresh_view = refresh_view.clone();
         Rc::new(move || {
-            let thread_opt = state.selected_thread.borrow().clone();
-            if let Some(thread) = thread_opt {
+            if thread_view.is_multi_select() {
+                let selected = thread_view.get_selected_threads();
+                for t in &selected {
+                    let _ = services::maildir::toggle_thread_read(t);
+                }
+                refresh_view();
+            } else if let Some(thread) = state.selected_thread.borrow().clone() {
                 if let Ok(new_unread) = services::maildir::toggle_thread_read(&thread) {
                     tracing::info!("Thread unread toggled: is_unread={new_unread}");
                     refresh_view();
@@ -1090,6 +1192,7 @@ fn build_ui(app: &adw::Application) {
         let trigger_sync_palette = trigger_sync.clone();
         let do_shortcuts_palette = do_shortcuts.clone();
         let do_settings_palette = do_settings.clone();
+        let thread_view_palette = thread_view.clone();
 
         Rc::new(ui::CommandPalette::with_action_handler(
             theme_manager.clone(),
@@ -1101,6 +1204,8 @@ fn build_ui(app: &adw::Application) {
                 "nav_drafts" => sidebar_view.select_folder("folder:drafts"),
                 "nav_trash" => sidebar_view.select_folder("folder:trash"),
                 "nav_feed" => sidebar_view.select_folder("view:feed"),
+                "select_all" => thread_view_palette.select_all(),
+                "clear_selection" => thread_view_palette.clear_selection(),
                 "reply" => do_reply(),
                 "reply_all" => do_reply_all(),
                 "forward" => do_forward(),
@@ -1122,14 +1227,31 @@ fn build_ui(app: &adw::Application) {
     });
 
     let do_back = {
+        let thread_view = thread_view.clone();
         let inner_split = inner_split.clone();
         let outer_split = outer_split.clone();
         Rc::new(move || {
-            if inner_split.is_collapsed() && inner_split.shows_content() {
+            if thread_view.is_multi_select() {
+                thread_view.clear_selection();
+            } else if inner_split.is_collapsed() && inner_split.shows_content() {
                 inner_split.set_show_content(false);
             } else if outer_split.is_collapsed() && outer_split.shows_content() {
                 outer_split.set_show_content(false);
             }
+        })
+    };
+
+    let do_toggle_select = {
+        let thread_view = thread_view.clone();
+        Rc::new(move || {
+            thread_view.toggle_current_selection();
+        })
+    };
+
+    let do_select_all = {
+        let thread_view = thread_view.clone();
+        Rc::new(move || {
+            thread_view.select_all();
         })
     };
 
@@ -1154,6 +1276,8 @@ fn build_ui(app: &adw::Application) {
                 sidebar_view.select_folder(folder_id);
             })
         },
+        on_toggle_select: do_toggle_select,
+        on_select_all: do_select_all,
     };
 
     ui::setup_window_keybindings(

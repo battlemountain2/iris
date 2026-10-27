@@ -2,6 +2,7 @@
 
 pub mod attachment;
 pub mod config;
+pub mod contact;
 pub mod draft;
 pub mod html_renderer;
 pub mod maildir;

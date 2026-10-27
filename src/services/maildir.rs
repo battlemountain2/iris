@@ -1231,4 +1231,53 @@ Got it, testing now!\r\n";
         let sanitized_no_uid = sanitize_filename_for_folder_move(without_uid);
         assert_eq!(sanitized_no_uid, without_uid);
     }
+
+    #[test]
+    fn test_batch_archive_multiple_threads_and_undo() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_batch_arch_test_{}", std::process::id()));
+        let account_root = temp_dir.join("demo");
+        let inbox_new = account_root.join("INBOX").join("new");
+        let archive_cur = account_root.join("Archive").join("cur");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&inbox_new).unwrap();
+        fs::create_dir_all(&archive_cur).unwrap();
+
+        let email1 = "From: Alice <alice@example.com>\r\nSubject: Thread 1\r\nDate: Mon, 20 Oct 2026 10:00:00 -0600\r\nMessage-ID: <t1@example.com>\r\nContent-Type: text/plain\r\n\r\nMsg 1";
+        let email2 = "From: Bob <bob@example.com>\r\nSubject: Thread 2\r\nDate: Mon, 20 Oct 2026 11:00:00 -0600\r\nMessage-ID: <t2@example.com>\r\nContent-Type: text/plain\r\n\r\nMsg 2";
+        let email3 = "From: Charlie <charlie@example.com>\r\nSubject: Thread 3\r\nDate: Mon, 20 Oct 2026 12:00:00 -0600\r\nMessage-ID: <t3@example.com>\r\nContent-Type: text/plain\r\n\r\nMsg 3";
+
+        let f1 = inbox_new.join("101.mail:2,");
+        let f2 = inbox_new.join("102.mail:2,");
+        let f3 = inbox_new.join("103.mail:2,");
+        fs::write(&f1, email1).unwrap();
+        fs::write(&f2, email2).unwrap();
+        fs::write(&f3, email3).unwrap();
+
+        let scanner = MaildirScanner::new(temp_dir.clone());
+        let threads = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(threads.len(), 3);
+
+        // Batch archive threads 1 and 2
+        let selected = vec![threads[0].clone(), threads[1].clone()];
+        let mut all_moves = Vec::new();
+        for t in &selected {
+            let moves = archive_thread(t, &account_root).expect("archive success");
+            all_moves.extend(moves);
+        }
+
+        assert_eq!(all_moves.len(), 2);
+        let rem_threads = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(rem_threads.len(), 1);
+        assert_eq!(rem_threads[0].subject, "Thread 1");
+
+        let arch_threads = scanner.scan_folder(&account_root.join("Archive"));
+        assert_eq!(arch_threads.len(), 2);
+
+        // Reversible Undo
+        restore_moved_files(&all_moves).expect("undo success");
+        let restored_threads = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(restored_threads.len(), 3);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

@@ -69,6 +69,8 @@ impl ShortcutsDialog {
 
         // Section 2: Triage
         content.append(&build_section("Triage & Organization", &[
+            ("Select / multi-select conversation", ShortcutKeys::Single("x")),
+            ("Select all conversations", ShortcutKeys::Single("Ctrl+A")),
             ("Archive conversation", ShortcutKeys::Or(&["e", "Swipe Right"])),
             ("Delete / Trash conversation", ShortcutKeys::Or(&["#", "Delete", "Swipe Left"])),
             ("Star / Flag conversation", ShortcutKeys::Single("s")),

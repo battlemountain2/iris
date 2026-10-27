@@ -50,6 +50,8 @@ pub struct ComposeDialog {
     debounce_timer: Rc<RefCell<Option<gtk::glib::SourceId>>>,
     pub attachments: Rc<RefCell<Vec<OutboundAttachment>>>,
     attachments_box: gtk::Box,
+    #[allow(deprecated)]
+    pub contacts_store: gtk::ListStore,
 }
 
 impl ComposeDialog {
@@ -215,6 +217,22 @@ impl ComposeDialog {
             .hexpand(true)
             .build();
         to_entry.add_css_class("flat");
+
+        // Contact Autocompletion
+        #[allow(deprecated)]
+        let completion = gtk::EntryCompletion::new();
+        #[allow(deprecated)]
+        let contacts_store = gtk::ListStore::new(&[glib::Type::STRING]);
+        #[allow(deprecated)]
+        {
+            completion.set_model(Some(&contacts_store));
+            completion.set_text_column(0);
+            completion.set_minimum_key_length(1);
+            completion.set_popup_completion(true);
+            completion.set_inline_completion(true);
+            to_entry.set_completion(Some(&completion));
+        }
+
         to_hbox.append(&to_entry);
         fields_vbox.append(&to_hbox);
 
@@ -565,6 +583,18 @@ impl ComposeDialog {
             debounce_timer,
             attachments,
             attachments_box,
+            contacts_store,
+        }
+    }
+
+    /// Updates the recipient autocompletion list with known contacts from Maildir.
+    #[allow(deprecated)]
+    pub fn update_contacts(&self, contacts: &[crate::services::contact::Contact]) {
+        self.contacts_store.clear();
+        for c in contacts {
+            let addr = c.to_address_string();
+            let iter = self.contacts_store.append();
+            self.contacts_store.set_value(&iter, 0, &addr.to_value());
         }
     }
 

@@ -183,6 +183,16 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   outline-offset: -1px;
 }
 
+/* Multi-Select Triage Active Rows */
+.iris-message-row.iris-row-multiselected {
+  background-color: alpha(@theme_accent, 0.22);
+  border-left: 3px solid @theme_accent;
+}
+
+.iris-message-row.iris-row-multiselected:hover {
+  background-color: alpha(@theme_accent, 0.28);
+}
+
 /* Swipe Gesture Feedback */
 .iris-message-row.swipe-archive {
   background-color: alpha(#5e8052, 0.38) !important;

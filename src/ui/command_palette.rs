@@ -103,6 +103,18 @@ const ACTIONS: &[PaletteAction] = &[
         id: "forward",
     },
     PaletteAction {
+        title: "Select All Visible Conversations",
+        category: "Message",
+        shortcut: Some("Ctrl+A"),
+        id: "select_all",
+    },
+    PaletteAction {
+        title: "Clear Multi-Selection",
+        category: "Message",
+        shortcut: Some("Esc"),
+        id: "clear_selection",
+    },
+    PaletteAction {
         title: "Archive Selected Message",
         category: "Message",
         shortcut: Some("e"),
