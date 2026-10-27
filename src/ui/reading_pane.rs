@@ -18,10 +18,12 @@ pub struct ReadingPaneView {
     pub forward_btn: gtk::Button,
     pub edit_draft_btn: gtk::Button,
     pub star_btn: gtk::Button,
+    pub tag_btn: gtk::Button,
     pub subject_label: gtk::Label,
     pub privacy_banner: gtk::Box,
     pub load_images_btn: gtk::Button,
     pub always_load_btn: gtk::Button,
+    pub tags_strip: gtk::Box,
     pub timeline_strip: gtk::Box,
     pub messages_container: gtk::Box,
     pub allow_remote_images: Cell<bool>,
@@ -88,6 +90,13 @@ impl ReadingPaneView {
         edit_draft_btn.set_visible(false);
         header.pack_end(&edit_draft_btn);
 
+        let tag_btn = gtk::Button::builder()
+            .icon_name("tag-symbolic")
+            .tooltip_text("Labels & Tags (l)")
+            .build();
+        tag_btn.add_css_class("flat");
+        header.pack_end(&tag_btn);
+
         let star_btn = gtk::Button::builder()
             .icon_name("non-starred-symbolic")
             .tooltip_text("Star / Flag (s)")
@@ -123,6 +132,12 @@ impl ReadingPaneView {
         subject_label.add_css_class("title-1");
         content_box.append(&subject_label);
 
+        // Thread Tags Strip
+        let tags_strip = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        tags_strip.set_margin_top(4);
+        tags_strip.set_visible(false);
+        content_box.append(&tags_strip);
+
         // Visual Conversation Timeline
         let timeline_strip = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         timeline_strip.set_margin_top(4);
@@ -157,10 +172,12 @@ impl ReadingPaneView {
             forward_btn,
             edit_draft_btn,
             star_btn,
+            tag_btn,
             subject_label,
             privacy_banner,
             load_images_btn,
             always_load_btn,
+            tags_strip,
             timeline_strip,
             messages_container,
             allow_remote_images,
@@ -182,6 +199,7 @@ impl ReadingPaneView {
         self.subject_label.set_text(&thread.subject);
 
         self.star_btn.set_visible(true);
+        self.tag_btn.set_visible(true);
         self.archive_btn.set_visible(true);
         self.trash_btn.set_visible(true);
 
@@ -220,6 +238,17 @@ impl ReadingPaneView {
         let allow = self.allow_remote_images.get();
         let any_remote = thread.messages.iter().any(|m| m.has_remote_images);
         self.privacy_banner.set_visible(any_remote && !allow);
+
+        // Thread Tags Strip
+        while let Some(child) = self.tags_strip.first_child() {
+            self.tags_strip.remove(&child);
+        }
+        for tag in &thread.tags {
+            let pill = gtk::Label::builder().label(tag).build();
+            pill.add_css_class("iris-tag-pill");
+            self.tags_strip.append(&pill);
+        }
+        self.tags_strip.set_visible(!thread.tags.is_empty());
 
         let mut chronological_msgs = thread.messages.clone();
         chronological_msgs.sort_by_key(|m| m.date);
@@ -273,6 +302,7 @@ impl ReadingPaneView {
         self.allow_remote_images.set(false);
         self.subject_label.set_visible(false);
         self.star_btn.set_visible(false);
+        self.tag_btn.set_visible(false);
         self.archive_btn.set_visible(false);
         self.trash_btn.set_visible(false);
         self.star_btn.set_icon_name("non-starred-symbolic");
@@ -281,6 +311,10 @@ impl ReadingPaneView {
         self.reply_all_btn.set_visible(false);
         self.forward_btn.set_visible(false);
         self.privacy_banner.set_visible(false);
+        self.tags_strip.set_visible(false);
+        while let Some(child) = self.tags_strip.first_child() {
+            self.tags_strip.remove(&child);
+        }
         self.timeline_strip.set_visible(false);
         while let Some(child) = self.timeline_strip.first_child() {
             self.timeline_strip.remove(&child);

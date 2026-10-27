@@ -302,6 +302,13 @@ fn build_ui(app: &adw::Application) {
                 }
             }
             sidebar_view.update_badge("inbox", total_unread);
+
+            // Update badges for custom folders
+            let custom_folders = services::maildir::discover_custom_folders_for_account(&state.mail_root.join("demo"));
+            for cf in &custom_folders {
+                let cf_unread = scanner.count_unread_in_folder(&state.mail_root.join("demo").join(cf));
+                sidebar_view.update_badge(&format!("custom_folder:{cf}"), cf_unread);
+            }
         })
     };
 
@@ -339,6 +346,11 @@ fn build_ui(app: &adw::Application) {
                     *state.current_folder.borrow_mut() = inbox;
                     *state.current_title.borrow_mut() = acct.display_name.clone();
                 }
+            } else if let Some(folder_name) = id.strip_prefix("custom_folder:") {
+                let custom_dir = demo_account.join(folder_name);
+                let _ = services::maildir::ensure_maildir_folder(&custom_dir);
+                *state.current_folder.borrow_mut() = custom_dir;
+                *state.current_title.borrow_mut() = folder_name.to_string();
             } else {
                 match id.as_str() {
                     "folder:drafts" => {
@@ -1076,6 +1088,172 @@ fn build_ui(app: &adw::Application) {
         })
     };
 
+    // Custom Folders in Sidebar & Management
+    let refresh_custom_folders = {
+        let sidebar_view = sidebar_view.clone();
+        let demo_account = demo_account.clone();
+        Rc::new(move || {
+            let custom = services::maildir::discover_custom_folders_for_account(&demo_account);
+            sidebar_view.set_custom_folders(&custom);
+        })
+    };
+    refresh_custom_folders();
+
+    let do_create_folder: Rc<dyn Fn()> = {
+        let window = window.clone();
+        let demo_account = demo_account.clone();
+        let refresh_cf = refresh_custom_folders.clone();
+        let sidebar_view = sidebar_view.clone();
+        let toast_overlay = toast_overlay.clone();
+
+        Rc::new(move || {
+            let win = window.clone();
+            let r_cf = refresh_cf.clone();
+            let sb = sidebar_view.clone();
+            let toast_ov = toast_overlay.clone();
+            ui::folder_dialog::prompt_create_folder(&win, &demo_account, move |name| {
+                r_cf();
+                sb.select_folder(&format!("custom_folder:{name}"));
+                let toast = adw::Toast::builder()
+                    .title(format!("Created folder \"{name}\""))
+                    .timeout(3)
+                    .build();
+                toast_ov.add_toast(toast);
+            });
+        })
+    };
+
+    {
+        let do_cf = do_create_folder.clone();
+        sidebar_view.add_folder_btn.connect_clicked(move |_| {
+            do_cf();
+        });
+    }
+
+    {
+        let window = window.clone();
+        let demo_account = demo_account.clone();
+        let refresh_cf = refresh_custom_folders.clone();
+        let sidebar_view_actions = sidebar_view.clone();
+        let state_actions = app_state.clone();
+        let toast_overlay_actions = toast_overlay.clone();
+
+        let on_rename: Rc<dyn Fn(String)> = {
+            let win = window.clone();
+            let da = demo_account.clone();
+            let r_cf = refresh_cf.clone();
+            let sb = sidebar_view_actions.clone();
+            let st = state_actions.clone();
+            let toast_ov = toast_overlay_actions.clone();
+            Rc::new(move |folder_name| {
+                let win = win.clone();
+                let da2 = da.clone();
+                let r_cf2 = r_cf.clone();
+                let sb2 = sb.clone();
+                let st2 = st.clone();
+                let toast_ov2 = toast_ov.clone();
+                ui::folder_dialog::prompt_rename_folder(&win, &da, &folder_name, move |old_name, new_name| {
+                    if *st2.current_title.borrow() == old_name {
+                        *st2.current_folder.borrow_mut() = da2.join(&new_name);
+                        *st2.current_title.borrow_mut() = new_name.clone();
+                    }
+                    r_cf2();
+                    sb2.select_folder(&format!("custom_folder:{new_name}"));
+                    let toast = adw::Toast::builder()
+                        .title(format!("Renamed folder \"{old_name}\" to \"{new_name}\""))
+                        .timeout(3)
+                        .build();
+                    toast_ov2.add_toast(toast);
+                });
+            })
+        };
+
+        let on_delete: Rc<dyn Fn(String)> = {
+            let win = window.clone();
+            let da = demo_account.clone();
+            let r_cf = refresh_cf.clone();
+            let sb = sidebar_view_actions.clone();
+            let st = state_actions.clone();
+            let toast_ov = toast_overlay_actions.clone();
+            Rc::new(move |folder_name| {
+                let win = win.clone();
+                let da2 = da.clone();
+                let r_cf2 = r_cf.clone();
+                let sb2 = sb.clone();
+                let st2 = st.clone();
+                let toast_ov2 = toast_ov.clone();
+                ui::folder_dialog::prompt_delete_folder(&win, &da2, &folder_name, move |del_name, moved_count| {
+                    if *st2.current_title.borrow() == del_name {
+                        sb2.select_folder("inbox");
+                    }
+                    r_cf2();
+                    let toast = adw::Toast::builder()
+                        .title(format!("Deleted folder \"{del_name}\" ({moved_count} messages moved to Trash)"))
+                        .timeout(3)
+                        .build();
+                    toast_ov2.add_toast(toast);
+                });
+            })
+        };
+
+        sidebar_view.set_folder_action_callbacks(on_rename, on_delete);
+    }
+
+    // Thread Tagging & Label Management (l key & Command Palette)
+    let tag_dialog = ui::TagDialog::new();
+    {
+        let state = app_state.clone();
+        let thread_view = thread_view.clone();
+        let reading_view = reading_view.clone();
+        let toast_overlay = toast_overlay.clone();
+
+        tag_dialog.set_on_tags_changed(Rc::new(move |thread_id, new_tags| {
+            if let Some(ref mut t) = *state.selected_thread.borrow_mut() {
+                if t.id == thread_id {
+                    t.tags = new_tags.clone();
+                    reading_view.display_thread(t);
+                }
+            }
+            let mut threads = thread_view.all_threads.borrow_mut();
+            if let Some(t) = threads.iter_mut().find(|th| th.id == thread_id) {
+                t.tags = new_tags.clone();
+            }
+            drop(threads);
+            thread_view.apply_filter(&thread_view.search_entry.text());
+
+            let toast = adw::Toast::builder()
+                .title(format!("Updated labels ({} active)", new_tags.len()))
+                .timeout(2)
+                .build();
+            toast_overlay.add_toast(toast);
+        }));
+    }
+
+    let do_tag: Rc<dyn Fn()> = {
+        let tag_dialog = tag_dialog.clone();
+        let state = app_state.clone();
+        let window = window.clone();
+        let toast_overlay = toast_overlay.clone();
+        Rc::new(move || {
+            if let Some(ref thread) = *state.selected_thread.borrow() {
+                tag_dialog.present(&window, &thread.id, &thread.subject);
+            } else {
+                let toast = adw::Toast::builder()
+                    .title("Select a conversation first to edit labels")
+                    .timeout(2)
+                    .build();
+                toast_overlay.add_toast(toast);
+            }
+        })
+    };
+
+    {
+        let do_tag_click = do_tag.clone();
+        reading_view.tag_btn.connect_clicked(move |_| {
+            do_tag_click();
+        });
+    }
+
     // Connect Trackpad & Mouse Horizontal Swipe Gestures
     {
         let arch_fn = archive_thread_fn.clone();
@@ -1380,6 +1558,8 @@ fn build_ui(app: &adw::Application) {
         let do_star = do_star.clone();
         let do_open_move_palette = do_open_move_dialog.clone();
         let do_empty_trash_palette = do_empty_trash.clone();
+        let do_tag_palette = do_tag.clone();
+        let do_create_folder_palette = do_create_folder.clone();
         let trigger_sync_palette = trigger_sync.clone();
         let do_shortcuts_palette = do_shortcuts.clone();
         let do_settings_palette = do_settings.clone();
@@ -1403,6 +1583,8 @@ fn build_ui(app: &adw::Application) {
                 "archive" => do_archive(),
                 "trash" => do_trash(),
                 "move_folder" => do_open_move_palette(),
+                "tag" => do_tag_palette(),
+                "create_folder" => do_create_folder_palette(),
                 "empty_trash" => do_empty_trash_palette(),
                 "star" => do_star(),
                 "sync" => trigger_sync_palette(),
@@ -1472,6 +1654,7 @@ fn build_ui(app: &adw::Application) {
         on_toggle_select: do_toggle_select,
         on_select_all: do_select_all,
         on_move_to_folder: do_open_move_dialog.clone(),
+        on_tag: do_tag.clone(),
     };
 
     ui::setup_window_keybindings(

@@ -133,6 +133,18 @@ const ACTIONS: &[PaletteAction] = &[
         id: "move_folder",
     },
     PaletteAction {
+        title: "Add / Edit Labels & Tags...",
+        category: "Message",
+        shortcut: Some("l"),
+        id: "tag",
+    },
+    PaletteAction {
+        title: "Create New Maildir Folder...",
+        category: "Mailbox",
+        shortcut: None,
+        id: "create_folder",
+    },
+    PaletteAction {
         title: "Empty Trash",
         category: "Mailbox",
         shortcut: None,

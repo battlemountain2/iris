@@ -80,6 +80,16 @@ navigation-split-view > navigation-page > .view,
   font-weight: 600;
 }
 
+.iris-folder-row-actions {
+  opacity: 0.0;
+  transition: opacity 150ms ease-in-out;
+}
+
+.iris-sidebar row:hover .iris-folder-row-actions,
+.iris-sidebar row:selected .iris-folder-row-actions {
+  opacity: 1.0;
+}
+
 /* ========================================================================= */
 /* 2. THREAD LIST PANE (Mimestream-Style Compact Hierarchy)                  */
 /* ========================================================================= */
@@ -273,6 +283,20 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 .iris-star-badge {
   color: @theme_highlight;
+}
+
+.iris-tag-pill {
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  background-color: alpha(@theme_accent, 0.16);
+  color: @theme_accent;
+  border: 1px solid alpha(@theme_accent, 0.28);
+}
+
+.iris-tag-pill:hover {
+  background-color: alpha(@theme_accent, 0.26);
 }
 
 /* ========================================================================= */

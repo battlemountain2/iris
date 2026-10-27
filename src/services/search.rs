@@ -10,6 +10,7 @@ pub enum SearchTerm {
     Subject(String),
     Body(String),
     Attachment(String),
+    Tag(String),
     IsUnread(bool),
     IsFlagged(bool),
     HasAttachment(bool),
@@ -115,6 +116,11 @@ fn parse_token(token: &str) -> Option<SearchTerm> {
         return Some(SearchTerm::IsFlagged(false));
     } else if t == "has:attachment" || t == "has:attachments" || t == "tag:attachment" {
         return Some(SearchTerm::HasAttachment(true));
+    } else if let Some(val) = t.strip_prefix("tag:").or_else(|| t.strip_prefix("label:")) {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::Tag(clean.to_lowercase()));
+        }
     } else {
         let clean = clean_val(t);
         if !clean.is_empty() {
@@ -163,6 +169,9 @@ fn matches_single_term(term: &SearchTerm, thread: &Thread) -> bool {
                 .iter()
                 .any(|m| m.attachments.iter().any(|a| matches_wildcard(val, &a.filename)))
         }
+        SearchTerm::Tag(val) => {
+            thread.tags.iter().any(|t| matches_wildcard(val, t))
+        }
         SearchTerm::IsUnread(expected) => thread.is_unread == *expected,
         SearchTerm::IsFlagged(expected) => thread.is_flagged == *expected,
         SearchTerm::HasAttachment(expected) => {
@@ -172,6 +181,7 @@ fn matches_single_term(term: &SearchTerm, thread: &Thread) -> bool {
         SearchTerm::General(val) => {
             matches_wildcard(val, &thread.subject)
                 || matches_wildcard(val, &thread.snippet)
+                || thread.tags.iter().any(|t| matches_wildcard(val, t))
                 || thread.senders.iter().any(|s| matches_wildcard(val, s))
                 || thread.messages.iter().any(|m| {
                     matches_wildcard(val, &m.from)
@@ -445,5 +455,30 @@ mod tests {
         assert!(matches_wildcard("*spec*", "hermes_spec_v2.pdf"));
         assert!(matches_wildcard("alex", "Alex Rivera"));
         assert!(!matches_wildcard("*.zip", "audio_spec.flac"));
+    }
+
+    #[test]
+    fn test_search_tags_and_labels() {
+        let mut thread = make_test_thread(
+            "Project Review",
+            &["Alex Rivera <alex@hermes.dev>"],
+            "Brayan <bry@omarchy.org>",
+            "Reviewing architecture",
+            "Looks great overall",
+            false,
+            false,
+            false,
+        );
+        thread.tags = vec!["Urgent".to_string(), "Project-Alpha".to_string()];
+
+        assert!(SearchQuery::parse("tag:urgent").matches_thread(&thread));
+        assert!(SearchQuery::parse("label:urgent").matches_thread(&thread));
+        assert!(SearchQuery::parse("tag:project*").matches_thread(&thread));
+        assert!(SearchQuery::parse("tag:*alpha").matches_thread(&thread));
+        assert!(!SearchQuery::parse("tag:finance").matches_thread(&thread));
+
+        // Universal general search matches tag
+        assert!(SearchQuery::parse("Urgent").matches_thread(&thread));
+        assert!(SearchQuery::parse("Project-Alpha").matches_thread(&thread));
     }
 }

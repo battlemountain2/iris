@@ -683,6 +683,20 @@ fn create_thread_card(
     line3.add_css_class("iris-row-snippet");
     vbox.append(&line3);
 
+    // Line 4 (optional): Tags pill strip
+    if !thread.tags.is_empty() {
+        let tag_box = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        tag_box.set_margin_top(2);
+        for tag in &thread.tags {
+            let pill = gtk::Label::builder()
+                .label(tag)
+                .build();
+            pill.add_css_class("iris-tag-pill");
+            tag_box.append(&pill);
+        }
+        vbox.append(&tag_box);
+    }
+
     row.set_child(Some(&vbox));
     row
 }

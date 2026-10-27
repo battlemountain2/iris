@@ -12,5 +12,6 @@ pub mod outbox;
 pub mod search;
 pub mod smtp;
 pub mod sync;
+pub mod tags;
 
 pub use maildir::MaildirScanner;

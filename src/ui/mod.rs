@@ -2,12 +2,14 @@
 
 pub mod command_palette;
 pub mod compose;
+pub mod folder_dialog;
 pub mod keybindings;
 pub mod move_dialog;
 pub mod reading_pane;
 pub mod settings;
 pub mod shortcuts;
 pub mod sidebar;
+pub mod tag_dialog;
 pub mod theme;
 pub mod thread_list;
 pub mod undo_send;
@@ -20,6 +22,7 @@ pub use reading_pane::ReadingPaneView;
 pub use settings::SettingsDialog;
 pub use shortcuts::ShortcutsDialog;
 pub use sidebar::SidebarView;
+pub use tag_dialog::TagDialog;
 pub use theme::ThemeManager;
 pub use thread_list::ThreadListView;
 pub use undo_send::show_undo_action_toast;

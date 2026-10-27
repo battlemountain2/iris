@@ -29,6 +29,7 @@ pub struct KeybindingActions {
     pub on_toggle_select: Rc<dyn Fn()>,
     pub on_select_all: Rc<dyn Fn()>,
     pub on_move_to_folder: Rc<dyn Fn()>,
+    pub on_tag: Rc<dyn Fn()>,
 }
 
 pub fn setup_window_keybindings(
@@ -208,6 +209,11 @@ pub fn setup_window_keybindings(
                 (actions_clone.on_move_to_folder)();
                 glib::Propagation::Stop
             }
+            // 'l' -> Add / Edit tags & labels...
+            Key::l => {
+                (actions_clone.on_tag)();
+                glib::Propagation::Stop
+            }
             // '/' -> Focus thread search
             Key::slash => {
                 (actions_clone.on_focus_search)();
@@ -270,6 +276,7 @@ mod tests {
         let inv6 = invoked.clone();
         let inv7 = invoked.clone();
         let inv8 = invoked.clone();
+        let inv9 = invoked.clone();
 
         let actions = KeybindingActions {
             on_archive: Rc::new(move || inv1.store(true, Ordering::SeqCst)),
@@ -289,6 +296,7 @@ mod tests {
             on_toggle_select: Rc::new(move || inv6.store(true, Ordering::SeqCst)),
             on_select_all: Rc::new(move || inv7.store(true, Ordering::SeqCst)),
             on_move_to_folder: Rc::new(move || inv8.store(true, Ordering::SeqCst)),
+            on_tag: Rc::new(move || inv9.store(true, Ordering::SeqCst)),
         };
 
         (actions.on_archive)();
@@ -320,6 +328,10 @@ mod tests {
 
         invoked.store(false, Ordering::SeqCst);
         (actions.on_move_to_folder)();
+        assert!(invoked.load(Ordering::SeqCst));
+
+        invoked.store(false, Ordering::SeqCst);
+        (actions.on_tag)();
         assert!(invoked.load(Ordering::SeqCst));
     }
 }

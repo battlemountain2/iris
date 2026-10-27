@@ -547,6 +547,85 @@ pub fn discover_folders_for_account(account_root: &Path) -> Vec<String> {
     folders
 }
 
+/// Discovers only custom (non-standard) Maildir folders for an account.
+pub fn discover_custom_folders_for_account(account_root: &Path) -> Vec<String> {
+    let standard = ["INBOX", "Archive", "Trash", "Sent", "Drafts"];
+    discover_folders_for_account(account_root)
+        .into_iter()
+        .filter(|f| !standard.iter().any(|&s| s.eq_ignore_ascii_case(f)))
+        .collect()
+}
+
+/// Renames a custom Maildir folder on disk.
+/// Fails if `new_name` is empty, contains path separators, or matches a reserved system mailbox.
+pub fn rename_folder(
+    account_root: &Path,
+    old_name: &str,
+    new_name: &str,
+) -> Result<(), String> {
+    let trimmed = new_name.trim();
+    if trimmed.is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.starts_with('.') {
+        return Err("Invalid characters in folder name".to_string());
+    }
+    let standard = ["INBOX", "Archive", "Trash", "Sent", "Drafts"];
+    if standard.iter().any(|&s| s.eq_ignore_ascii_case(trimmed)) {
+        return Err("Cannot rename to a reserved mailbox name".to_string());
+    }
+
+    let old_dir = account_root.join(old_name);
+    let new_dir = account_root.join(trimmed);
+
+    if !old_dir.exists() {
+        return Err(format!("Folder '{old_name}' does not exist"));
+    }
+    if new_dir.exists() {
+        return Err(format!("Folder '{trimmed}' already exists"));
+    }
+
+    fs::rename(&old_dir, &new_dir).map_err(|e| format!("Failed to rename folder: {e}"))
+}
+
+/// Deletes a custom Maildir folder on disk.
+/// Moves any contained messages to Trash before removing the folder directory.
+pub fn delete_folder(
+    account_root: &Path,
+    folder_name: &str,
+) -> Result<usize, String> {
+    let standard = ["INBOX", "Archive", "Trash", "Sent", "Drafts"];
+    if standard.iter().any(|&s| s.eq_ignore_ascii_case(folder_name)) {
+        return Err("Cannot delete reserved system mailboxes".to_string());
+    }
+
+    let folder_dir = account_root.join(folder_name);
+    if !folder_dir.exists() {
+        return Err(format!("Folder '{folder_name}' does not exist"));
+    }
+
+    let trash_dir = account_root.join("Trash");
+    let _ = ensure_maildir_folder(&trash_dir);
+
+    let mut moved_count = 0;
+    for subdir in &["cur", "new", "tmp"] {
+        let sub = folder_dir.join(subdir);
+        if let Ok(entries) = fs::read_dir(&sub) {
+            for entry in entries.flatten() {
+                let file_path = entry.path();
+                if file_path.is_file() {
+                    if move_message_to_folder(&file_path, &trash_dir).is_ok() {
+                        moved_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fs::remove_dir_all(&folder_dir).map_err(|e| format!("Failed to remove directory: {e}"))?;
+    Ok(moved_count)
+}
+
 /// Reverses a set of file moves (e.g. for the 10-second Undo action).
 pub fn restore_moved_files(moves: &[(PathBuf, PathBuf)]) -> Result<(), String> {
     for (original_path, current_path) in moves {
@@ -921,6 +1000,8 @@ fn group_into_threads(mut messages: Vec<Message>) -> Vec<Thread> {
             .clone()
             .unwrap_or_else(|| latest.subject.clone());
 
+        let thread_tags = crate::services::tags::get_tags_for_thread(&latest.id);
+
         threads.push(Thread {
             id: latest.id.clone(),
             subject: latest.subject.clone(),
@@ -930,7 +1011,7 @@ fn group_into_threads(mut messages: Vec<Message>) -> Vec<Thread> {
             message_count: msgs.len() as u32,
             is_unread: has_unread,
             is_flagged: has_flagged,
-            tags: Vec::new(),
+            tags: thread_tags,
             messages: msgs,
         });
     }
@@ -1419,6 +1500,41 @@ Got it, testing now!\r\n";
         let new_entries = fs::read_dir(&trash_new).unwrap().count();
         assert_eq!(cur_entries, 0);
         assert_eq!(new_entries, 0);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_rename_and_delete_custom_folder() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_rename_del_test_{}", std::process::id()));
+        let account_root = temp_dir.join("demo");
+        let work_cur = account_root.join("Work").join("cur");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&work_cur).unwrap();
+
+        fs::write(work_cur.join("msg1:2,S"), "Work email").unwrap();
+
+        // Rename Work -> Projects
+        rename_folder(&account_root, "Work", "Projects").expect("rename success");
+        assert!(!account_root.join("Work").exists());
+        assert!(account_root.join("Projects").join("cur").join("msg1:2,S").exists());
+
+        // Renaming to invalid / reserved name fails
+        assert!(rename_folder(&account_root, "Projects", "INBOX").is_err());
+        assert!(rename_folder(&account_root, "Projects", "../bad").is_err());
+
+        // Delete Projects -> messages moved to Trash
+        let moved = delete_folder(&account_root, "Projects").expect("delete success");
+        assert_eq!(moved, 1);
+        assert!(!account_root.join("Projects").exists());
+        let trash_cur = account_root.join("Trash").join("cur");
+        assert_eq!(fs::read_dir(trash_cur).unwrap().count(), 1);
+
+        // Discovery test: create custom folders
+        fs::create_dir_all(account_root.join("Clients").join("cur")).unwrap();
+        fs::create_dir_all(account_root.join("Finance").join("cur")).unwrap();
+        let custom = discover_custom_folders_for_account(&account_root);
+        assert_eq!(custom, vec!["Clients", "Finance"]);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
