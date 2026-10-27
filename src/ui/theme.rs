@@ -11,10 +11,22 @@ use serde::{Deserialize, Serialize};
 
 pub mod noctalia;
 
-const BUILTIN_THEMES: [(&str, &str); 12] = [
+const BUILTIN_THEMES: [(&str, &str); 15] = [
     ("iris-dark", include_str!("../../data/themes/attic-olive.toml")),
     ("iris-light", include_str!("../../data/themes/iris-light.toml")),
     ("attic-olive", include_str!("../../data/themes/attic-olive.toml")),
+    (
+        "spartan-crimson",
+        include_str!("../../data/themes/spartan-crimson.toml"),
+    ),
+    (
+        "byzantine-bronze",
+        include_str!("../../data/themes/byzantine-bronze.toml"),
+    ),
+    (
+        "attic-amber",
+        include_str!("../../data/themes/attic-amber.toml"),
+    ),
     (
         "corinthian-bronze",
         include_str!("../../data/themes/corinthian-bronze.toml"),
@@ -88,9 +100,10 @@ impl ThemeManager {
             }
         }
 
-        let id = self.current_id.borrow();
+        let raw_id = self.current_id.borrow();
+        let id = raw_id.replace('_', "-");
         for (theme_id, toml_str) in BUILTIN_THEMES {
-            if *theme_id == *id {
+            if *theme_id == id {
                 if let Ok(tokens) = toml::from_str::<ThemeTokens>(toml_str) {
                     return tokens;
                 }
@@ -230,6 +243,24 @@ mod tests {
         for (id, toml_str) in BUILTIN_THEMES {
             let tokens = toml::from_str::<ThemeTokens>(toml_str);
             assert!(tokens.is_ok(), "Theme '{}' failed to parse: {:?}", id, tokens.err());
+        }
+    }
+
+    #[test]
+    fn test_greek_antiquity_themes_exist() {
+        let expected = [
+            "attic-olive",
+            "spartan-crimson",
+            "byzantine-bronze",
+            "attic-amber",
+            "corinthian-bronze",
+        ];
+        for expected_id in expected {
+            let found = BUILTIN_THEMES.iter().any(|(id, _)| *id == expected_id);
+            assert!(
+                found,
+                "Expected Greek antiquity theme '{expected_id}' not found in BUILTIN_THEMES"
+            );
         }
     }
 }

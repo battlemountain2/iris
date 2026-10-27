@@ -609,9 +609,10 @@ fn create_thread_card(
     let line1 = gtk::Box::new(gtk::Orientation::Horizontal, 6);
 
     let dot = gtk::Label::new(None);
-    dot.add_css_class("iris-unread-dot");
     if is_unread {
-        dot.add_css_class("active");
+        dot.add_css_class("iris-unread-dot");
+    } else {
+        dot.add_css_class("iris-unread-placeholder");
     }
     line1.append(&dot);
 

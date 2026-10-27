@@ -116,36 +116,52 @@ impl SettingsDialog {
         // Group 2: Appearance & Theme
         let theme_group = adw::PreferencesGroup::builder()
             .title("Appearance & Color Palette")
-            .description("Liquid-glass theme presets inspired by Greek antiquity")
+            .description("Liquid-glass theme presets inspired by Greek antiquity & modern palettes")
             .build();
 
         let themes = [
-            ("attic_olive", "Attic Olive Glass", "Default liquid glass with golden olive accent"),
-            ("spartan_crimson", "Spartan Crimson", "Deep lacquer crimson with gold contrast"),
-            ("byzantine_bronze", "Byzantine Bronze", "Imperial bronze and purple glass"),
-            ("attic_amber", "Attic Amber", "Warm sunlight amber with olive tones"),
+            ("attic-olive", "Attic Olive Glass", "Default liquid glass with golden olive accent", "emblem-favorite-symbolic"),
+            ("spartan-crimson", "Spartan Crimson", "Deep lacquer crimson with gold contrast", "weather-clear-night-symbolic"),
+            ("byzantine-bronze", "Byzantine Bronze", "Imperial bronze and purple glass", "software-properties-symbolic"),
+            ("attic-amber", "Attic Amber", "Warm sunlight amber with olive tones", "weather-clear-symbolic"),
+            ("corinthian-bronze", "Corinthian Bronze", "Warm copper and dark earth glass", "weather-overcast-symbolic"),
+            ("iris-light", "Iris Olive (Light)", "Alabaster daylight paper with olive laurel", "display-brightness-symbolic"),
+            ("catppuccin", "Catppuccin Mocha", "Soothing pastel dark palette", "applications-graphics-symbolic"),
+            ("tokyo-night", "Tokyo Night", "Clean neon and indigo dark theme", "night-light-symbolic"),
+            ("everforest", "Everforest", "Warm natural forest green tones", "starred-symbolic"),
+            ("rose-pine", "Rosé Pine", "All natural pine, faux fur and bouillon", "view-conceal-symbolic"),
+            ("midnight", "Midnight", "Ultra-deep OLED dark slate", "weather-clear-night-symbolic"),
         ];
 
-        for (theme_id, title, desc) in themes {
+        let current_theme_id = theme_manager.current_id.borrow().clone().replace('_', "-");
+        let check_images: std::rc::Rc<std::cell::RefCell<Vec<(String, gtk::Image)>>> =
+            std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+
+        for (theme_id, title, desc, icon_name) in themes {
             let row = adw::ActionRow::builder()
                 .title(title)
                 .subtitle(desc)
                 .activatable(true)
                 .build();
 
-            let icon_color = match theme_id {
-                "attic_olive" => "emblem-favorite-symbolic",
-                "spartan_crimson" => "weather-clear-night-symbolic",
-                "byzantine_bronze" => "software-properties-symbolic",
-                _ => "weather-clear-symbolic",
-            };
-            row.add_prefix(&gtk::Image::from_icon_name(icon_color));
+            row.add_prefix(&gtk::Image::from_icon_name(icon_name));
+
+            let check_icon = gtk::Image::from_icon_name("emblem-ok-symbolic");
+            check_icon.add_css_class("accent");
+            check_icon.set_visible(current_theme_id == theme_id);
+            row.add_suffix(&check_icon);
+
+            check_images.borrow_mut().push((theme_id.to_string(), check_icon.clone()));
 
             let tm = theme_manager.clone();
             let tid = theme_id.to_string();
+            let check_images_clone = check_images.clone();
             row.connect_activated(move |_| {
                 tm.set_theme(&tid);
                 tracing::info!("Activated theme: {tid}");
+                for (id, img) in check_images_clone.borrow().iter() {
+                    img.set_visible(id == &tid);
+                }
             });
 
             theme_group.add(&row);

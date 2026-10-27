@@ -134,14 +134,20 @@ impl ReadingPaneView {
         let messages_container = gtk::Box::new(gtk::Orientation::Vertical, 16);
         content_box.append(&messages_container);
 
-        scrolled.set_child(Some(&content_box));
+        let clamp = adw::Clamp::builder()
+            .maximum_size(820)
+            .tightening_threshold(620)
+            .child(&content_box)
+            .build();
+
+        scrolled.set_child(Some(&clamp));
         container.append(&scrolled);
 
         let current_thread = RefCell::new(None);
         let allow_remote_images = Cell::new(false);
         let toast_overlay = RefCell::new(None);
 
-        Self {
+        let view = Self {
             container,
             back_btn,
             archive_btn,
@@ -160,7 +166,9 @@ impl ReadingPaneView {
             allow_remote_images,
             current_thread,
             toast_overlay,
-        }
+        };
+        view.clear();
+        view
     }
 
     /// Attaches the main window's toast overlay for save notifications.
@@ -170,7 +178,12 @@ impl ReadingPaneView {
 
     /// Dynamically loads and renders a thread's messages into the reading pane.
     pub fn display_thread(&self, thread: &Thread) {
+        self.subject_label.set_visible(true);
         self.subject_label.set_text(&thread.subject);
+
+        self.star_btn.set_visible(true);
+        self.archive_btn.set_visible(true);
+        self.trash_btn.set_visible(true);
 
         // Update Star icon
         if thread.is_flagged {
@@ -258,12 +271,15 @@ impl ReadingPaneView {
     pub fn clear(&self) {
         *self.current_thread.borrow_mut() = None;
         self.allow_remote_images.set(false);
-        self.subject_label.set_text("No conversation selected");
+        self.subject_label.set_visible(false);
+        self.star_btn.set_visible(false);
+        self.archive_btn.set_visible(false);
+        self.trash_btn.set_visible(false);
         self.star_btn.set_icon_name("non-starred-symbolic");
         self.edit_draft_btn.set_visible(false);
-        self.reply_btn.set_visible(true);
-        self.reply_all_btn.set_visible(true);
-        self.forward_btn.set_visible(true);
+        self.reply_btn.set_visible(false);
+        self.reply_all_btn.set_visible(false);
+        self.forward_btn.set_visible(false);
         self.privacy_banner.set_visible(false);
         self.timeline_strip.set_visible(false);
         while let Some(child) = self.timeline_strip.first_child() {
@@ -272,6 +288,35 @@ impl ReadingPaneView {
         while let Some(child) = self.messages_container.first_child() {
             self.messages_container.remove(&child);
         }
+
+        let empty_box = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        empty_box.set_halign(gtk::Align::Center);
+        empty_box.set_valign(gtk::Align::Center);
+        empty_box.set_vexpand(true);
+        empty_box.set_margin_top(80);
+        empty_box.set_margin_bottom(80);
+        empty_box.add_css_class("iris-reading-empty");
+
+        let icon = gtk::Image::from_icon_name("mail-read-symbolic");
+        icon.set_pixel_size(64);
+        icon.add_css_class("dim-label");
+        empty_box.append(&icon);
+
+        let title = gtk::Label::builder()
+            .label("No Conversation Selected")
+            .build();
+        title.add_css_class("title-2");
+        title.add_css_class("dim-label");
+        empty_box.append(&title);
+
+        let subtitle = gtk::Label::builder()
+            .label("Select an email from the list or press 'c' to compose")
+            .build();
+        subtitle.add_css_class("caption");
+        subtitle.add_css_class("dim-label");
+        empty_box.append(&subtitle);
+
+        self.messages_container.append(&empty_box);
     }
 }
 
