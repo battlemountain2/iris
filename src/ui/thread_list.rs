@@ -76,7 +76,7 @@ impl ThreadListView {
         search_box.set_margin_bottom(4);
 
         let search_entry = gtk::SearchEntry::builder()
-            .placeholder_text("Filter conversations... (/)")
+            .placeholder_text("Search messages, bodies, files... (/)")
             .hexpand(true)
             .build();
         search_entry.add_css_class("iris-search-entry");
@@ -324,7 +324,7 @@ impl ThreadListView {
             }
         }
         if sel_count > 0 {
-            self.title.set_subtitle(&format!("{sel_count} selected"));
+            self.title.set_subtitle(&format!("{sel_count} selected • e: Archive, #: Delete, s: Star, Esc: Clear"));
         } else {
             let q = self.search_entry.text();
             let active_tab = self.filter_tab.get();
@@ -396,7 +396,7 @@ impl ThreadListView {
         let unread_count = filtered.iter().filter(|t| t.is_unread).count();
         let sel_count = self.selected_thread_ids.borrow().len();
         if sel_count > 0 {
-            self.title.set_subtitle(&format!("{sel_count} selected"));
+            self.title.set_subtitle(&format!("{sel_count} selected • e: Archive, #: Delete, s: Star, Esc: Clear"));
         } else if q.is_empty() {
             let tab_label = match active_tab {
                 FilterTab::All => format!("{unread_count} unread"),

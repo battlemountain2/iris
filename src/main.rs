@@ -675,10 +675,14 @@ fn build_ui(app: &adw::Application) {
     }
 
     // Preferences & Settings Dialog (Ctrl+,)
+    let compose_for_settings = compose_dialog.clone();
     let settings_dialog = Rc::new(ui::SettingsDialog::new(
         &iris_config,
         theme_manager.clone(),
         trigger_sync.clone(),
+        Some(Rc::new(move |new_cfg| {
+            compose_for_settings.set_accounts(&new_cfg.accounts);
+        })),
     ));
     let do_settings = {
         let settings_dialog = settings_dialog.clone();

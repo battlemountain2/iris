@@ -12,6 +12,7 @@ pub struct AccountIdentity {
     pub id: String,
     pub display: String,
     pub email: String,
+    pub signature: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,7 +43,8 @@ pub struct ComposeDialog {
     subject_entry: gtk::Entry,
     body_view: gtk::TextView,
     from_dropdown: gtk::DropDown,
-    pub accounts: Vec<AccountIdentity>,
+    pub accounts: Rc<RefCell<Vec<AccountIdentity>>>,
+    current_account_idx: Rc<std::cell::Cell<usize>>,
     in_reply_to: Rc<RefCell<Option<String>>>,
     references: Rc<RefCell<Vec<String>>>,
     draft_file_path: Rc<RefCell<Option<PathBuf>>>,
@@ -72,16 +74,19 @@ impl ComposeDialog {
                     id: "demo".to_string(),
                     display: "Gmail (Personal)".to_string(),
                     email: "bry@gmail.com".to_string(),
+                    signature: Some("Brayan\nSent with Iris — Liquid Glass Mail".to_string()),
                 },
                 AccountIdentity {
                     id: "work".to_string(),
                     display: "Gmail (Work)".to_string(),
                     email: "brayan@work.com".to_string(),
+                    signature: Some("Brayan | Hermes Audio Engine\nbrayan@work.com".to_string()),
                 },
                 AccountIdentity {
                     id: "icloud".to_string(),
                     display: "iCloud".to_string(),
                     email: "brayan@icloud.com".to_string(),
+                    signature: Some("Brayan\nSent from Iris on Arch Linux".to_string()),
                 },
             ]
         } else {
@@ -91,9 +96,13 @@ impl ComposeDialog {
                     id: a.id.clone(),
                     display: a.display_name.clone(),
                     email: a.email.clone(),
+                    signature: a.signature.clone(),
                 })
                 .collect()
         };
+
+        let accounts_rc = Rc::new(RefCell::new(accounts));
+        let current_account_idx = Rc::new(std::cell::Cell::new(0usize));
 
         let dialog = adw::Dialog::builder()
             .title("New Message")
@@ -188,7 +197,8 @@ impl ComposeDialog {
         from_lbl.add_css_class("dim-label");
         from_hbox.append(&from_lbl);
 
-        let account_labels: Vec<String> = accounts
+        let account_labels: Vec<String> = accounts_rc
+            .borrow()
             .iter()
             .map(|a| format!("{} <{}>", a.display, a.email))
             .collect();
@@ -286,6 +296,29 @@ impl ComposeDialog {
             .bottom_margin(12)
             .build();
         body_view.add_css_class("iris-compose-body");
+
+        // Dynamic Signature Swapping on Account Selection
+        let body_view_for_drop = body_view.clone();
+        let accounts_for_drop = accounts_rc.clone();
+        let current_idx_drop = current_account_idx.clone();
+        from_dropdown.connect_selected_notify(move |dropdown| {
+            let new_idx = dropdown.selected() as usize;
+            let old_idx = current_idx_drop.get();
+            if new_idx == old_idx {
+                return;
+            }
+            current_idx_drop.set(new_idx);
+            let accounts = accounts_for_drop.borrow();
+            let old_sig = accounts.get(old_idx).and_then(|a| a.signature.as_deref());
+            let new_sig = accounts.get(new_idx).and_then(|a| a.signature.as_deref());
+            let buffer = body_view_for_drop.buffer();
+            let (start, end) = buffer.bounds();
+            let current_text = buffer.text(&start, &end, false).to_string();
+            let updated_text = swap_signature(&current_text, old_sig, new_sig);
+            if updated_text != current_text {
+                buffer.set_text(&updated_text);
+            }
+        });
 
         // Live Markdown Preview Panel
         let preview_scrolled = gtk::ScrolledWindow::builder()
@@ -387,7 +420,7 @@ impl ComposeDialog {
         let diag_clone = dialog.clone();
         let in_reply_to_clone = in_reply_to.clone();
         let references_clone = references.clone();
-        let accounts_for_send = accounts.clone();
+        let accounts_for_send = accounts_rc.clone();
         let draft_path_send = draft_file_path.clone();
         let debounce_timer_send = debounce_timer.clone();
         let attachments_for_send = attachments.clone();
@@ -403,9 +436,17 @@ impl ComposeDialog {
             let body = buffer.text(&start, &end, false).to_string();
 
             let acct_idx = from_clone.selected() as usize;
-            let acct = accounts_for_send
+            let accts = accounts_for_send.borrow();
+            let acct = accts
                 .get(acct_idx)
-                .unwrap_or(&accounts_for_send[0]);
+                .or_else(|| accts.first())
+                .cloned()
+                .unwrap_or_else(|| AccountIdentity {
+                    id: "demo".to_string(),
+                    display: "Personal".to_string(),
+                    email: "bry@gmail.com".to_string(),
+                    signature: None,
+                });
 
             let draft_path = draft_path_send.borrow_mut().take();
             let atts = attachments_for_send.borrow().clone();
@@ -502,7 +543,7 @@ impl ComposeDialog {
             let sub_e = subject_entry.clone();
             let body_v = body_view.clone();
             let from_d = from_dropdown.clone();
-            let accts = accounts.clone();
+            let accts = accounts_rc.clone();
             let in_rep = in_reply_to.clone();
             let refs = references.clone();
 
@@ -533,7 +574,17 @@ impl ComposeDialog {
                             let body = buf.text(&start, &end, false).to_string();
 
                             let acct_idx = from_c.selected() as usize;
-                            let acct = accts_c.get(acct_idx).unwrap_or(&accts_c[0]);
+                            let accts = accts_c.borrow();
+                            let acct = accts
+                                .get(acct_idx)
+                                .or_else(|| accts.first())
+                                .cloned()
+                                .unwrap_or_else(|| AccountIdentity {
+                                    id: "demo".to_string(),
+                                    display: "Personal".to_string(),
+                                    email: "bry@gmail.com".to_string(),
+                                    signature: None,
+                                });
                             let existing = d_path_c.borrow().clone();
 
                             if let Ok(new_path) = crate::services::draft::save_draft(
@@ -575,7 +626,8 @@ impl ComposeDialog {
             subject_entry,
             body_view,
             from_dropdown,
-            accounts,
+            accounts: accounts_rc,
+            current_account_idx,
             in_reply_to,
             references,
             draft_file_path,
@@ -626,10 +678,21 @@ impl ComposeDialog {
         self.attachments_box.set_visible(false);
         self.to_entry.set_text("");
         self.subject_entry.set_text("");
-        self.body_view.buffer().set_text("");
+        self.current_account_idx.set(0);
+        self.from_dropdown.set_selected(0);
+
+        let sig = self.accounts.borrow().first().and_then(|a| a.signature.clone());
+        if let Some(s) = sig {
+            let formatted = format_signature(&s);
+            self.body_view.buffer().set_text(&formatted);
+            let start_iter = self.body_view.buffer().start_iter();
+            self.body_view.buffer().place_cursor(&start_iter);
+        } else {
+            self.body_view.buffer().set_text("");
+        }
+
         *self.in_reply_to.borrow_mut() = None;
         self.references.borrow_mut().clear();
-        self.from_dropdown.set_selected(0);
         self.dialog.present(Some(parent));
         self.to_entry.grab_focus();
     }
@@ -655,21 +718,37 @@ impl ComposeDialog {
         };
         self.subject_entry.set_text(&reply_subject);
 
+        let target_pos = if let Some(acct) = account_id {
+            self.accounts
+                .borrow()
+                .iter()
+                .position(|a| a.id == acct)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        self.current_account_idx.set(target_pos);
+        self.from_dropdown.set_selected(target_pos as u32);
+
         let quote = if !quote_body.is_empty() {
             format!("\n\n> {}", quote_body.replace('\n', "\n> "))
         } else {
             String::new()
         };
-        self.body_view.buffer().set_text(&quote);
+
+        let sig = self
+            .accounts
+            .borrow()
+            .get(target_pos)
+            .and_then(|a| a.signature.clone());
+        let sig_part = sig.as_deref().map(format_signature).unwrap_or_default();
+
+        self.body_view.buffer().set_text(&format!("{sig_part}{quote}"));
+        let start_iter = self.body_view.buffer().start_iter();
+        self.body_view.buffer().place_cursor(&start_iter);
 
         *self.in_reply_to.borrow_mut() = in_reply_to;
         *self.references.borrow_mut() = references;
-
-        if let Some(acct) = account_id {
-            if let Some(pos) = self.accounts.iter().position(|a| a.id == acct) {
-                self.from_dropdown.set_selected(pos as u32);
-            }
-        }
 
         self.dialog.present(Some(parent));
         self.body_view.grab_focus();
@@ -696,7 +775,8 @@ impl ComposeDialog {
         *self.draft_file_path.borrow_mut() = draft_path;
 
         if let Some(acct) = account_id {
-            if let Some(pos) = self.accounts.iter().position(|a| a.id == acct) {
+            if let Some(pos) = self.accounts.borrow().iter().position(|a| a.id == acct) {
+                self.current_account_idx.set(pos);
                 self.from_dropdown.set_selected(pos as u32);
             }
         }
@@ -726,20 +806,61 @@ impl ComposeDialog {
         };
         self.subject_entry.set_text(&fwd_subject);
 
+        let target_pos = if let Some(acct) = account_id {
+            self.accounts
+                .borrow()
+                .iter()
+                .position(|a| a.id == acct)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        self.current_account_idx.set(target_pos);
+        self.from_dropdown.set_selected(target_pos as u32);
+
+        let sig = self
+            .accounts
+            .borrow()
+            .get(target_pos)
+            .and_then(|a| a.signature.clone());
+        let sig_part = sig.as_deref().map(format_signature).unwrap_or_default();
+
         let body_content = format_forward_body(from, date_str, subject, to_str, original_body);
-        self.body_view.buffer().set_text(&body_content);
+        let full_body = if !sig_part.is_empty() {
+            format!("{sig_part}\n\n{body_content}")
+        } else {
+            body_content
+        };
+        self.body_view.buffer().set_text(&full_body);
+        let start_iter = self.body_view.buffer().start_iter();
+        self.body_view.buffer().place_cursor(&start_iter);
 
         *self.in_reply_to.borrow_mut() = None;
         self.references.borrow_mut().clear();
 
-        if let Some(acct) = account_id {
-            if let Some(pos) = self.accounts.iter().position(|a| a.id == acct) {
-                self.from_dropdown.set_selected(pos as u32);
-            }
-        }
-
         self.dialog.present(Some(parent));
         self.to_entry.grab_focus();
+    }
+
+    /// Dynamically updates configured accounts and identity dropdown.
+    pub fn set_accounts(&self, new_accounts: &[crate::services::config::AccountConfig]) {
+        let mapped: Vec<AccountIdentity> = new_accounts
+            .iter()
+            .map(|a| AccountIdentity {
+                id: a.id.clone(),
+                display: a.display_name.clone(),
+                email: a.email.clone(),
+                signature: a.signature.clone(),
+            })
+            .collect();
+        let labels: Vec<String> = mapped
+            .iter()
+            .map(|a| format!("{} <{}>", a.display, a.email))
+            .collect();
+        let slices: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+        self.from_dropdown
+            .set_model(Some(&gtk::StringList::new(&slices)));
+        *self.accounts.borrow_mut() = mapped;
     }
 
     pub fn reopen_draft(
@@ -879,9 +1000,69 @@ fn wrap_selection(buffer: &gtk::TextBuffer, prefix: &str, suffix: &str) {
     }
 }
 
+/// Formats a signature string according to standard email conventions (`\n\n-- \n{sig}`).
+pub fn format_signature(sig: &str) -> String {
+    let trimmed = sig.trim();
+    if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n-- \n{trimmed}")
+    }
+}
+
+/// Swaps an existing signature in the text buffer with a new account's signature.
+/// If the old signature is present, it is replaced in-place.
+/// If no old signature was present, the new signature is appended to the bottom.
+pub fn swap_signature(body: &str, old_sig: Option<&str>, new_sig: Option<&str>) -> String {
+    let formatted_new = new_sig.map(format_signature).unwrap_or_default();
+
+    if let Some(old) = old_sig {
+        let formatted_old = format_signature(old);
+        if !formatted_old.is_empty() && body.contains(&formatted_old) {
+            return body.replace(&formatted_old, &formatted_new);
+        }
+    }
+
+    if !formatted_new.is_empty() {
+        if body.is_empty() {
+            formatted_new
+        } else {
+            format!("{}{}", body.trim_end(), formatted_new)
+        }
+    } else {
+        body.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_signature() {
+        assert_eq!(
+            format_signature("Alex Rivera\nHermes"),
+            "\n\n-- \nAlex Rivera\nHermes"
+        );
+        assert_eq!(format_signature("   "), "");
+    }
+
+    #[test]
+    fn test_swap_signature() {
+        let old = "Brayan\nPersonal";
+        let new = "Brayan\nWork";
+        let body = format!("Hello World!{}", format_signature(old));
+        let swapped = swap_signature(&body, Some(old), Some(new));
+        assert_eq!(swapped, format!("Hello World!{}", format_signature(new)));
+
+        // Swapping to None removes signature
+        let removed = swap_signature(&swapped, Some(new), None);
+        assert_eq!(removed, "Hello World!");
+
+        // Adding signature to clean body
+        let added = swap_signature("Hello World!", None, Some(new));
+        assert_eq!(added, format!("Hello World!{}", format_signature(new)));
+    }
 
     #[test]
     fn test_filter_reply_all_recipients_excludes_user_emails() {

@@ -6,12 +6,15 @@ use crate::model::Thread;
 pub enum SearchTerm {
     From(String),
     To(String),
+    Cc(String),
     Subject(String),
     Body(String),
+    Attachment(String),
     IsUnread(bool),
     IsFlagged(bool),
     HasAttachment(bool),
     General(String),
+    Not(Box<SearchTerm>),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -20,8 +23,8 @@ pub struct SearchQuery {
 }
 
 impl SearchQuery {
-    /// Parses an input search string supporting fielded qualifiers and freeform keywords.
-    /// Example: `from:alex is:unread subject:"audio visualizer" release`
+    /// Parses an input search string supporting fielded qualifiers, wildcards, negation, and freeform keywords.
+    /// Example: `from:alex is:unread subject:"audio visualizer" attach:*.pdf -tag:spam release`
     pub fn parse(input: &str) -> Self {
         let raw = input.trim();
         if raw.is_empty() {
@@ -32,51 +35,8 @@ impl SearchQuery {
         let tokens = tokenize_query(raw);
 
         for token in tokens {
-            if let Some(val) = token.strip_prefix("from:") {
-                let clean = clean_val(val);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::From(clean.to_lowercase()));
-                }
-            } else if let Some(val) = token.strip_prefix("f:") {
-                let clean = clean_val(val);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::From(clean.to_lowercase()));
-                }
-            } else if let Some(val) = token.strip_prefix("to:") {
-                let clean = clean_val(val);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::To(clean.to_lowercase()));
-                }
-            } else if let Some(val) = token.strip_prefix("subject:") {
-                let clean = clean_val(val);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::Subject(clean.to_lowercase()));
-                }
-            } else if let Some(val) = token.strip_prefix("s:") {
-                let clean = clean_val(val);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::Subject(clean.to_lowercase()));
-                }
-            } else if let Some(val) = token.strip_prefix("body:") {
-                let clean = clean_val(val);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::Body(clean.to_lowercase()));
-                }
-            } else if token == "is:unread" || token == "tag:unread" {
-                terms.push(SearchTerm::IsUnread(true));
-            } else if token == "is:read" || token == "tag:read" {
-                terms.push(SearchTerm::IsUnread(false));
-            } else if token == "is:flagged" || token == "is:starred" || token == "tag:flagged" || token == "tag:starred" {
-                terms.push(SearchTerm::IsFlagged(true));
-            } else if token == "is:unflagged" || token == "is:unstarred" {
-                terms.push(SearchTerm::IsFlagged(false));
-            } else if token == "has:attachment" || token == "has:attachments" || token == "tag:attachment" {
-                terms.push(SearchTerm::HasAttachment(true));
-            } else {
-                let clean = clean_val(&token);
-                if !clean.is_empty() {
-                    terms.push(SearchTerm::General(clean.to_lowercase()));
-                }
+            if let Some(term) = parse_token(&token) {
+                terms.push(term);
             }
         }
 
@@ -89,93 +49,194 @@ impl SearchQuery {
             return true;
         }
 
-        let subject_lower = thread.subject.to_lowercase();
-        let snippet_lower = thread.snippet.to_lowercase();
-
-        for term in &self.terms {
-            match term {
-                SearchTerm::From(val) => {
-                    let matches_sender = thread
-                        .senders
-                        .iter()
-                        .any(|s| s.to_lowercase().contains(val))
-                        || thread
-                            .messages
-                            .iter()
-                            .any(|m| m.from.to_lowercase().contains(val));
-                    if !matches_sender {
-                        return false;
-                    }
-                }
-                SearchTerm::To(val) => {
-                    let matches_to = thread
-                        .messages
-                        .iter()
-                        .any(|m| m.to.iter().any(|t| t.to_lowercase().contains(val)));
-                    if !matches_to {
-                        return false;
-                    }
-                }
-                SearchTerm::Subject(val) => {
-                    if !subject_lower.contains(val) {
-                        return false;
-                    }
-                }
-                SearchTerm::Body(val) => {
-                    let matches_body = snippet_lower.contains(val)
-                        || thread.messages.iter().any(|m| {
-                            m.body_plain
-                                .as_ref()
-                                .map(|b| b.to_lowercase().contains(val))
-                                .unwrap_or(false)
-                                || m.body_html
-                                    .as_ref()
-                                    .map(|b| b.to_lowercase().contains(val))
-                                    .unwrap_or(false)
-                        });
-                    if !matches_body {
-                        return false;
-                    }
-                }
-                SearchTerm::IsUnread(expected) => {
-                    if thread.is_unread != *expected {
-                        return false;
-                    }
-                }
-                SearchTerm::IsFlagged(expected) => {
-                    if thread.is_flagged != *expected {
-                        return false;
-                    }
-                }
-                SearchTerm::HasAttachment(expected) => {
-                    let has_att = thread
-                        .messages
-                        .iter()
-                        .any(|m| !m.attachments.is_empty());
-                    if has_att != *expected {
-                        return false;
-                    }
-                }
-                SearchTerm::General(val) => {
-                    let matches_any = subject_lower.contains(val)
-                        || snippet_lower.contains(val)
-                        || thread.senders.iter().any(|s| s.to_lowercase().contains(val))
-                        || thread.messages.iter().any(|m| {
-                            m.from.to_lowercase().contains(val)
-                                || m.body_plain
-                                    .as_ref()
-                                    .map(|b| b.to_lowercase().contains(val))
-                                    .unwrap_or(false)
-                        });
-                    if !matches_any {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        true
+        self.terms.iter().all(|term| matches_single_term(term, thread))
     }
+}
+
+fn parse_token(token: &str) -> Option<SearchTerm> {
+    let t = token.trim();
+    if t.is_empty() {
+        return None;
+    }
+
+    // Negation prefix: `-from:alex` or `not:is:unread`
+    if let Some(inner) = t.strip_prefix('-') {
+        if !inner.is_empty() {
+            return parse_token(inner).map(|term| SearchTerm::Not(Box::new(term)));
+        }
+    } else if let Some(inner) = t.strip_prefix("not:") {
+        if !inner.is_empty() {
+            return parse_token(inner).map(|term| SearchTerm::Not(Box::new(term)));
+        }
+    }
+
+    if let Some(val) = t.strip_prefix("from:").or_else(|| t.strip_prefix("f:")) {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::From(clean.to_lowercase()));
+        }
+    } else if let Some(val) = t.strip_prefix("to:") {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::To(clean.to_lowercase()));
+        }
+    } else if let Some(val) = t.strip_prefix("cc:") {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::Cc(clean.to_lowercase()));
+        }
+    } else if let Some(val) = t.strip_prefix("subject:").or_else(|| t.strip_prefix("s:")) {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::Subject(clean.to_lowercase()));
+        }
+    } else if let Some(val) = t.strip_prefix("body:").or_else(|| t.strip_prefix("b:")) {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::Body(clean.to_lowercase()));
+        }
+    } else if let Some(val) = t
+        .strip_prefix("attach:")
+        .or_else(|| t.strip_prefix("attachment:"))
+        .or_else(|| t.strip_prefix("filename:"))
+        .or_else(|| t.strip_prefix("file:"))
+    {
+        let clean = clean_val(val);
+        if !clean.is_empty() {
+            return Some(SearchTerm::Attachment(clean.to_lowercase()));
+        }
+    } else if t == "is:unread" || t == "tag:unread" {
+        return Some(SearchTerm::IsUnread(true));
+    } else if t == "is:read" || t == "tag:read" {
+        return Some(SearchTerm::IsUnread(false));
+    } else if t == "is:flagged" || t == "is:starred" || t == "tag:flagged" || t == "tag:starred" {
+        return Some(SearchTerm::IsFlagged(true));
+    } else if t == "is:unflagged" || t == "is:unstarred" {
+        return Some(SearchTerm::IsFlagged(false));
+    } else if t == "has:attachment" || t == "has:attachments" || t == "tag:attachment" {
+        return Some(SearchTerm::HasAttachment(true));
+    } else {
+        let clean = clean_val(t);
+        if !clean.is_empty() {
+            return Some(SearchTerm::General(clean.to_lowercase()));
+        }
+    }
+
+    None
+}
+
+fn matches_single_term(term: &SearchTerm, thread: &Thread) -> bool {
+    match term {
+        SearchTerm::From(val) => {
+            thread.senders.iter().any(|s| matches_wildcard(val, s))
+                || thread.messages.iter().any(|m| matches_wildcard(val, &m.from))
+        }
+        SearchTerm::To(val) => {
+            thread
+                .messages
+                .iter()
+                .any(|m| m.to.iter().any(|t| matches_wildcard(val, t)))
+        }
+        SearchTerm::Cc(val) => {
+            thread
+                .messages
+                .iter()
+                .any(|m| m.cc.iter().any(|c| matches_wildcard(val, c)))
+        }
+        SearchTerm::Subject(val) => matches_wildcard(val, &thread.subject),
+        SearchTerm::Body(val) => {
+            matches_wildcard(val, &thread.snippet)
+                || thread.messages.iter().any(|m| {
+                    m.body_plain
+                        .as_ref()
+                        .map(|b| matches_wildcard(val, b))
+                        .unwrap_or(false)
+                        || m.body_html
+                            .as_ref()
+                            .map(|b| matches_wildcard(val, b))
+                            .unwrap_or(false)
+                })
+        }
+        SearchTerm::Attachment(val) => {
+            thread
+                .messages
+                .iter()
+                .any(|m| m.attachments.iter().any(|a| matches_wildcard(val, &a.filename)))
+        }
+        SearchTerm::IsUnread(expected) => thread.is_unread == *expected,
+        SearchTerm::IsFlagged(expected) => thread.is_flagged == *expected,
+        SearchTerm::HasAttachment(expected) => {
+            let has_att = thread.messages.iter().any(|m| !m.attachments.is_empty());
+            has_att == *expected
+        }
+        SearchTerm::General(val) => {
+            matches_wildcard(val, &thread.subject)
+                || matches_wildcard(val, &thread.snippet)
+                || thread.senders.iter().any(|s| matches_wildcard(val, s))
+                || thread.messages.iter().any(|m| {
+                    matches_wildcard(val, &m.from)
+                        || m.to.iter().any(|t| matches_wildcard(val, t))
+                        || m.cc.iter().any(|c| matches_wildcard(val, c))
+                        || m.body_plain
+                            .as_ref()
+                            .map(|b| matches_wildcard(val, b))
+                            .unwrap_or(false)
+                        || m.body_html
+                            .as_ref()
+                            .map(|b| matches_wildcard(val, b))
+                            .unwrap_or(false)
+                        || m.attachments
+                            .iter()
+                            .any(|a| matches_wildcard(val, &a.filename))
+                })
+        }
+        SearchTerm::Not(inner) => !matches_single_term(inner, thread),
+    }
+}
+
+/// Case-insensitive text and wildcard matcher.
+/// If `pattern` contains '*' or '?', performs wildcard matching;
+/// otherwise performs standard case-insensitive substring matching.
+pub fn matches_wildcard(pattern: &str, text: &str) -> bool {
+    let p = pattern.trim().to_lowercase();
+    let t = text.trim().to_lowercase();
+    if p.is_empty() {
+        return true;
+    }
+    if !p.contains('*') && !p.contains('?') {
+        return t.contains(&p);
+    }
+    wildcard_match_chars(&p.chars().collect::<Vec<_>>(), &t.chars().collect::<Vec<_>>())
+}
+
+fn wildcard_match_chars(pattern: &[char], text: &[char]) -> bool {
+    let mut p_idx = 0;
+    let mut t_idx = 0;
+    let mut p_star = None;
+    let mut t_star = 0;
+
+    while t_idx < text.len() {
+        if p_idx < pattern.len() && (pattern[p_idx] == '?' || pattern[p_idx] == text[t_idx]) {
+            p_idx += 1;
+            t_idx += 1;
+        } else if p_idx < pattern.len() && pattern[p_idx] == '*' {
+            p_star = Some(p_idx);
+            p_idx += 1;
+            t_star = t_idx;
+        } else if let Some(star) = p_star {
+            p_idx = star + 1;
+            t_star += 1;
+            t_idx = t_star;
+        } else {
+            return false;
+        }
+    }
+
+    while p_idx < pattern.len() && pattern[p_idx] == '*' {
+        p_idx += 1;
+    }
+
+    p_idx == pattern.len()
 }
 
 fn clean_val(s: &str) -> String {
@@ -340,5 +401,49 @@ mod tests {
         assert!(SearchQuery::parse("s:quick").matches_thread(&thread));
         assert!(SearchQuery::parse("is:read").matches_thread(&thread));
         assert!(SearchQuery::parse("is:unflagged").matches_thread(&thread));
+    }
+
+    #[test]
+    fn test_search_attachment_and_wildcard_matching() {
+        let thread = make_test_thread(
+            "Hermes Audio Pipeline",
+            &["Alex Rivera <alex@hermes.dev>"],
+            "bry@omarchy.org",
+            "Goertzel filter bank",
+            "Full implementation details inside",
+            true,
+            false,
+            true, // has file.pdf
+        );
+
+        // Attachment search
+        assert!(SearchQuery::parse("attach:file.pdf").matches_thread(&thread));
+        assert!(SearchQuery::parse("attach:*.pdf").matches_thread(&thread));
+        assert!(SearchQuery::parse("filename:*pdf*").matches_thread(&thread));
+        assert!(!SearchQuery::parse("attach:*.zip").matches_thread(&thread));
+
+        // Wildcard search across senders and subject
+        assert!(SearchQuery::parse("from:*@hermes.dev*").matches_thread(&thread));
+        assert!(SearchQuery::parse("subject:*audio*").matches_thread(&thread));
+        assert!(SearchQuery::parse("subject:hermes*").matches_thread(&thread));
+
+        // Negation
+        assert!(SearchQuery::parse("-from:spam").matches_thread(&thread));
+        assert!(SearchQuery::parse("-is:read").matches_thread(&thread));
+        assert!(!SearchQuery::parse("-from:alex").matches_thread(&thread));
+        assert!(!SearchQuery::parse("-has:attachment").matches_thread(&thread));
+
+        // General full text search matches body
+        assert!(SearchQuery::parse("implementation").matches_thread(&thread));
+        assert!(SearchQuery::parse("filter").matches_thread(&thread));
+    }
+
+    #[test]
+    fn test_matches_wildcard_cases() {
+        assert!(matches_wildcard("*.flac", "audio_spec.flac"));
+        assert!(matches_wildcard("spec*", "spec_v2.pdf"));
+        assert!(matches_wildcard("*spec*", "hermes_spec_v2.pdf"));
+        assert!(matches_wildcard("alex", "Alex Rivera"));
+        assert!(!matches_wildcard("*.zip", "audio_spec.flac"));
     }
 }

@@ -2,6 +2,7 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use adw::prelude::*;
 
@@ -17,7 +18,9 @@ impl SettingsDialog {
         config: &IrisConfig,
         theme_manager: Rc<ThemeManager>,
         on_trigger_sync: Rc<dyn Fn()>,
+        on_config_updated: Option<Rc<dyn Fn(IrisConfig)>>,
     ) -> Self {
+        let live_config = Rc::new(RefCell::new(config.clone()));
         let dialog = adw::Dialog::builder()
             .title("Preferences & Accounts")
             .content_width(640)
@@ -67,18 +70,45 @@ impl SettingsDialog {
                 };
                 let subtitle = format!("{}{}", acct.email, smtp_info);
 
-                let row = adw::ActionRow::builder()
+                let exp_row = adw::ExpanderRow::builder()
                     .title(&acct.display_name)
                     .subtitle(&subtitle)
+                    .expanded(false)
                     .build();
 
-                row.add_prefix(&gtk::Image::from_icon_name("mail-inbox-symbolic"));
+                exp_row.add_prefix(&gtk::Image::from_icon_name("mail-inbox-symbolic"));
 
                 let badge = gtk::Label::new(Some("Active"));
                 badge.add_css_class("iris-key-badge");
-                row.add_suffix(&badge);
+                exp_row.add_suffix(&badge);
 
-                accts_group.add(&row);
+                let sig_entry = adw::EntryRow::builder()
+                    .title("Email Signature")
+                    .text(acct.signature.as_deref().unwrap_or(""))
+                    .show_apply_button(true)
+                    .build();
+
+                let cfg_clone = live_config.clone();
+                let on_update_c = on_config_updated.clone();
+                let acct_id = acct.id.clone();
+                sig_entry.connect_apply(move |entry| {
+                    let new_text = entry.text().trim().to_string();
+                    let mut cfg = cfg_clone.borrow_mut();
+                    if let Some(target) = cfg.accounts.iter_mut().find(|a| a.id == acct_id) {
+                        target.signature = if new_text.is_empty() { None } else { Some(new_text) };
+                    }
+                    if let Err(e) = crate::services::config::save_config(&cfg) {
+                        tracing::error!("Failed to save signature to config: {e}");
+                    } else {
+                        tracing::info!("Updated signature for account '{acct_id}'");
+                    }
+                    if let Some(ref cb) = on_update_c {
+                        cb(cfg.clone());
+                    }
+                });
+
+                exp_row.add_row(&sig_entry);
+                accts_group.add(&exp_row);
             }
         }
         page.add(&accts_group);

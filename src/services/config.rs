@@ -19,6 +19,8 @@ pub struct AccountConfig {
     pub smtp_username: Option<String>,
     #[serde(default)]
     pub smtp_password: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -66,6 +68,7 @@ impl Default for IrisConfig {
                     smtp_port: None,
                     smtp_username: None,
                     smtp_password: None,
+                    signature: Some("Brayan\nSent with Iris — Liquid Glass Mail".to_string()),
                 },
                 AccountConfig {
                     id: "work".to_string(),
@@ -76,6 +79,7 @@ impl Default for IrisConfig {
                     smtp_port: None,
                     smtp_username: None,
                     smtp_password: None,
+                    signature: Some("Brayan | Hermes Audio Engine\nbrayan@work.com".to_string()),
                 },
                 AccountConfig {
                     id: "icloud".to_string(),
@@ -86,6 +90,7 @@ impl Default for IrisConfig {
                     smtp_port: None,
                     smtp_username: None,
                     smtp_password: None,
+                    signature: Some("Brayan\nSent from Iris on Arch Linux".to_string()),
                 },
             ],
             sync: SyncConfig::default(),
@@ -137,6 +142,26 @@ pub fn load_or_create_config_from(path: &Path) -> IrisConfig {
     IrisConfig::default()
 }
 
+pub fn save_config(config: &IrisConfig) -> Result<(), String> {
+    save_config_to(&get_config_file_path(), config)
+}
+
+pub fn save_config_to(path: &Path, config: &IrisConfig) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let toml_str = toml::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config to TOML: {e}"))?;
+    let commented_toml = format!(
+        "# Iris Configuration File\n\
+         # Location: ~/.config/iris/config.toml\n\n\
+         {toml_str}\n"
+    );
+    fs::write(path, commented_toml)
+        .map_err(|e| format!("Failed to write config to {}: {e}", path.display()))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,6 +187,7 @@ display_name = "Proton Mail"
 email = "bry@pm.me"
 smtp_host = "127.0.0.1"
 smtp_port = 1025
+signature = "Alex Rivera\nHermes Audio Engine"
 
 [sync]
 command = "mbsync proton"
@@ -173,8 +199,23 @@ interval_seconds = 120
         assert_eq!(custom_loaded.accounts[0].id, "proton");
         assert_eq!(custom_loaded.accounts[0].email, "bry@pm.me");
         assert_eq!(custom_loaded.accounts[0].smtp_port, Some(1025));
+        assert_eq!(
+            custom_loaded.accounts[0].signature,
+            Some("Alex Rivera\nHermes Audio Engine".to_string())
+        );
         assert_eq!(custom_loaded.sync.command, "mbsync proton");
         assert_eq!(custom_loaded.sync.interval_seconds, 120);
+
+        // Test save_config_to round-trip
+        let mut to_modify = custom_loaded;
+        to_modify.accounts[0].signature = Some("Updated Signature".to_string());
+        save_config_to(&cfg_path, &to_modify).unwrap();
+
+        let reloaded = load_or_create_config_from(&cfg_path);
+        assert_eq!(
+            reloaded.accounts[0].signature,
+            Some("Updated Signature".to_string())
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

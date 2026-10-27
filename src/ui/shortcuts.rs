@@ -91,8 +91,10 @@ impl ShortcutsDialog {
 
         // Section 4: Global & Search
         content.append(&build_section("Global & Search", &[
-            ("Search messages & filter", ShortcutKeys::Single("/")),
+            ("Search messages & full text", ShortcutKeys::Single("/")),
+            ("Filter bodies / attachments", ShortcutKeys::Or(&["body:", "attach:"])),
             ("Command Palette", ShortcutKeys::Or(&["Ctrl+K", "Space"])),
+            ("Preferences & Accounts", ShortcutKeys::Single("Ctrl+,")),
             ("Synchronize mailboxes (mbsync)", ShortcutKeys::Single("Ctrl+R")),
             ("Open Keyboard Shortcuts cheatsheet", ShortcutKeys::Single("?")),
         ]));
