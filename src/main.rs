@@ -241,6 +241,9 @@ fn build_ui(app: &adw::Application) {
             let title = state.current_title.borrow().clone();
             thread_view.title.set_title(&title);
 
+            let is_trash = folder.file_name().and_then(|n| n.to_str()).unwrap_or("") == "Trash" || title == "Trash";
+            thread_view.empty_trash_btn.set_visible(is_trash);
+
             let prev_index = thread_view.list_box.selected_row().map(|r| r.index() as usize).unwrap_or(0);
             let prev_id = state.selected_thread.borrow().as_ref().map(|t| t.id.clone());
 
@@ -882,6 +885,188 @@ fn build_ui(app: &adw::Application) {
         })
     };
 
+    // Move to Folder Dialog & Handlers (v key & Command Palette)
+    let move_dialog = ui::MoveToFolderDialog::new();
+
+    let move_thread_fn = {
+        let state = app_state.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+        let last_undo = last_undo.clone();
+
+        Rc::new(move |thread: Thread, target_folder_name: String| {
+            let subject = thread.subject.clone();
+            let folder = state.current_folder.borrow().clone();
+            let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+            let last_undo = last_undo.clone();
+            match services::maildir::move_thread_to_folder(&thread, &target_folder_name, &account_fallback) {
+                Ok(moves) => {
+                    tracing::info!("Moved thread '{}' to '{}' ({} files moved)", subject, target_folder_name, moves.len());
+                    refresh_view();
+                    let refresh_undo = refresh_view.clone();
+                    let subj_undo = subject.clone();
+                    let target_name_undo = target_folder_name.clone();
+                    let undo_action: Rc<dyn Fn()> = Rc::new(move || {
+                        if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                            tracing::error!("Failed to undo move: {e}");
+                        } else {
+                            tracing::info!("Restored moved thread: '{subj_undo}' from '{target_name_undo}'");
+                            refresh_undo();
+                        }
+                    });
+                    last_undo.replace(Some(undo_action.clone()));
+                    let undo_toast = undo_action.clone();
+                    ui::show_undo_action_toast(
+                        &toast_overlay,
+                        &format!("Moved to {target_folder_name}: {subject}"),
+                        move || {
+                            undo_toast();
+                        },
+                    );
+                }
+                Err(err) => {
+                    tracing::error!("Move failed: {err}");
+                }
+            }
+        })
+    };
+
+    let do_move_selected_to_folder = {
+        let state = app_state.clone();
+        let move_fn = move_thread_fn.clone();
+        let thread_view = thread_view.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+        let last_undo = last_undo.clone();
+
+        Rc::new(move |target_folder_name: String| {
+            if thread_view.is_multi_select() {
+                let selected = thread_view.get_selected_threads();
+                if selected.is_empty() {
+                    return;
+                }
+                let count = selected.len();
+                let folder = state.current_folder.borrow().clone();
+                let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+                let mut all_moves = Vec::new();
+                for t in &selected {
+                    if let Ok(moves) = services::maildir::move_thread_to_folder(t, &target_folder_name, &account_fallback) {
+                        all_moves.extend(moves);
+                    }
+                }
+                thread_view.clear_selection();
+                refresh_view();
+
+                let refresh_undo = refresh_view.clone();
+                let target_name_undo = target_folder_name.clone();
+                let undo_action: Rc<dyn Fn()> = Rc::new(move || {
+                    if let Err(e) = services::maildir::restore_moved_files(&all_moves) {
+                        tracing::error!("Failed to undo batch move: {e}");
+                    } else {
+                        tracing::info!("Restored {count} moved threads from '{target_name_undo}'");
+                        refresh_undo();
+                    }
+                });
+                last_undo.replace(Some(undo_action.clone()));
+                let undo_toast = undo_action.clone();
+                ui::show_undo_action_toast(
+                    &toast_overlay,
+                    &format!("Moved {count} conversations to {target_folder_name}"),
+                    move || {
+                        undo_toast();
+                    },
+                );
+            } else if let Some(thread) = state.selected_thread.borrow().clone() {
+                move_fn(thread, target_folder_name);
+            }
+        })
+    };
+
+    {
+        let do_move = do_move_selected_to_folder.clone();
+        move_dialog.set_on_select(Rc::new(move |folder_name| {
+            do_move(folder_name);
+        }));
+    }
+
+    let do_open_move_dialog = {
+        let state = app_state.clone();
+        let window = window.clone();
+        let move_dialog = move_dialog.clone();
+
+        Rc::new(move || {
+            let current_folder = state.current_folder.borrow().clone();
+            let account_fallback = current_folder.parent().unwrap_or(&current_folder).to_path_buf();
+            let current_folder_name = current_folder.file_name().and_then(|n| n.to_str()).unwrap_or("INBOX");
+            let available_folders = services::maildir::discover_folders_for_account(&account_fallback);
+
+            move_dialog.present(
+                &window,
+                Some(current_folder_name),
+                &available_folders,
+            );
+        })
+    };
+
+    let do_empty_trash = {
+        let state = app_state.clone();
+        let toast_overlay = toast_overlay.clone();
+        let refresh_view = refresh_view.clone();
+        let window = window.clone();
+
+        Rc::new(move || {
+            let current_folder = state.current_folder.borrow().clone();
+            let account_fallback = current_folder.parent().unwrap_or(&current_folder).to_path_buf();
+            let trash_folder = if current_folder.file_name().and_then(|n| n.to_str()) == Some("Trash") {
+                current_folder.clone()
+            } else {
+                account_fallback.join("Trash")
+            };
+
+            let alert = adw::AlertDialog::builder()
+                .heading("Empty Trash?")
+                .body("Are you sure you want to permanently delete all messages in Trash? This action cannot be undone.")
+                .build();
+            alert.add_response("cancel", "Cancel");
+            alert.add_response("empty", "Empty Trash");
+            alert.set_response_appearance("empty", adw::ResponseAppearance::Destructive);
+
+            let refresh = refresh_view.clone();
+            let toast_ov = toast_overlay.clone();
+            let tf = trash_folder.clone();
+            alert.choose(Some(&window), None::<&gio::Cancellable>, move |response| {
+                if response == "empty" {
+                    match services::maildir::empty_trash_folder(&tf) {
+                        Ok(deleted) => {
+                            tracing::info!("Emptied trash: permanently deleted {deleted} messages");
+                            refresh();
+                            let toast = adw::Toast::builder()
+                                .title(format!("Emptied Trash ({deleted} messages permanently deleted)"))
+                                .timeout(3)
+                                .build();
+                            toast_ov.add_toast(toast);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to empty trash: {e}");
+                            let toast = adw::Toast::builder()
+                                .title(format!("Failed to empty trash: {e}"))
+                                .timeout(4)
+                                .build();
+                            toast_ov.add_toast(toast);
+                        }
+                    }
+                }
+            });
+        })
+    };
+
+    {
+        let empty_fn = do_empty_trash.clone();
+        thread_view.empty_trash_btn.connect_clicked(move |_| {
+            empty_fn();
+        });
+    }
+
     let do_undo = {
         let last_undo = last_undo.clone();
         Rc::new(move || {
@@ -1193,6 +1378,8 @@ fn build_ui(app: &adw::Application) {
         let do_reply_all = do_reply_all.clone();
         let do_forward = do_forward.clone();
         let do_star = do_star.clone();
+        let do_open_move_palette = do_open_move_dialog.clone();
+        let do_empty_trash_palette = do_empty_trash.clone();
         let trigger_sync_palette = trigger_sync.clone();
         let do_shortcuts_palette = do_shortcuts.clone();
         let do_settings_palette = do_settings.clone();
@@ -1215,6 +1402,8 @@ fn build_ui(app: &adw::Application) {
                 "forward" => do_forward(),
                 "archive" => do_archive(),
                 "trash" => do_trash(),
+                "move_folder" => do_open_move_palette(),
+                "empty_trash" => do_empty_trash_palette(),
                 "star" => do_star(),
                 "sync" => trigger_sync_palette(),
                 "shortcuts" => do_shortcuts_palette(),
@@ -1282,6 +1471,7 @@ fn build_ui(app: &adw::Application) {
         },
         on_toggle_select: do_toggle_select,
         on_select_all: do_select_all,
+        on_move_to_folder: do_open_move_dialog.clone(),
     };
 
     ui::setup_window_keybindings(

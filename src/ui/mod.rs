@@ -3,6 +3,7 @@
 pub mod command_palette;
 pub mod compose;
 pub mod keybindings;
+pub mod move_dialog;
 pub mod reading_pane;
 pub mod settings;
 pub mod shortcuts;
@@ -14,6 +15,7 @@ pub mod undo_send;
 pub use command_palette::CommandPalette;
 pub use compose::ComposeDialog;
 pub use keybindings::{setup_window_keybindings, KeybindingActions};
+pub use move_dialog::MoveToFolderDialog;
 pub use reading_pane::ReadingPaneView;
 pub use settings::SettingsDialog;
 pub use shortcuts::ShortcutsDialog;

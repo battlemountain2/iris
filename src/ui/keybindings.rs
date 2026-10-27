@@ -28,6 +28,7 @@ pub struct KeybindingActions {
     pub on_nav_folder: Rc<dyn Fn(&str)>,
     pub on_toggle_select: Rc<dyn Fn()>,
     pub on_select_all: Rc<dyn Fn()>,
+    pub on_move_to_folder: Rc<dyn Fn()>,
 }
 
 pub fn setup_window_keybindings(
@@ -202,6 +203,11 @@ pub fn setup_window_keybindings(
                 (actions_clone.on_toggle_read)();
                 glib::Propagation::Stop
             }
+            // 'v' -> Move to folder...
+            Key::v => {
+                (actions_clone.on_move_to_folder)();
+                glib::Propagation::Stop
+            }
             // '/' -> Focus thread search
             Key::slash => {
                 (actions_clone.on_focus_search)();
@@ -263,6 +269,7 @@ mod tests {
         let inv5 = invoked.clone();
         let inv6 = invoked.clone();
         let inv7 = invoked.clone();
+        let inv8 = invoked.clone();
 
         let actions = KeybindingActions {
             on_archive: Rc::new(move || inv1.store(true, Ordering::SeqCst)),
@@ -281,6 +288,7 @@ mod tests {
             on_nav_folder: Rc::new(|_| {}),
             on_toggle_select: Rc::new(move || inv6.store(true, Ordering::SeqCst)),
             on_select_all: Rc::new(move || inv7.store(true, Ordering::SeqCst)),
+            on_move_to_folder: Rc::new(move || inv8.store(true, Ordering::SeqCst)),
         };
 
         (actions.on_archive)();
@@ -308,6 +316,10 @@ mod tests {
 
         invoked.store(false, Ordering::SeqCst);
         (actions.on_select_all)();
+        assert!(invoked.load(Ordering::SeqCst));
+
+        invoked.store(false, Ordering::SeqCst);
+        (actions.on_move_to_folder)();
         assert!(invoked.load(Ordering::SeqCst));
     }
 }

@@ -22,6 +22,7 @@ pub struct ThreadListView {
     pub title: adw::WindowTitle,
     pub sidebar_toggle_btn: gtk::Button,
     pub compose_btn: gtk::Button,
+    pub empty_trash_btn: gtk::Button,
     pub search_entry: gtk::SearchEntry,
     pub palette_btn: gtk::Button,
     pub filter_tab: Cell<FilterTab>,
@@ -65,6 +66,15 @@ impl ThreadListView {
             .build();
         compose_btn.add_css_class("suggested-action");
         header.pack_end(&compose_btn);
+
+        let empty_trash_btn = gtk::Button::builder()
+            .icon_name("user-trash-symbolic")
+            .tooltip_text("Empty Trash (permanently delete all)")
+            .label("Empty Trash")
+            .visible(false)
+            .build();
+        empty_trash_btn.add_css_class("destructive-action");
+        header.pack_end(&empty_trash_btn);
 
         container.append(&header);
 
@@ -169,6 +179,7 @@ impl ThreadListView {
             title,
             sidebar_toggle_btn,
             compose_btn,
+            empty_trash_btn,
             search_entry,
             palette_btn,
             filter_tab,
@@ -396,7 +407,7 @@ impl ThreadListView {
         let unread_count = filtered.iter().filter(|t| t.is_unread).count();
         let sel_count = self.selected_thread_ids.borrow().len();
         if sel_count > 0 {
-            self.title.set_subtitle(&format!("{sel_count} selected • e: Archive, #: Delete, s: Star, Esc: Clear"));
+            self.title.set_subtitle(&format!("{sel_count} selected • e: Archive, v: Move, #: Delete, s: Star, Esc: Clear"));
         } else if q.is_empty() {
             let tab_label = match active_tab {
                 FilterTab::All => format!("{unread_count} unread"),

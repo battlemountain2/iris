@@ -471,6 +471,82 @@ pub fn trash_thread(
     Ok(moves)
 }
 
+/// Moves all messages in a thread to a specified destination folder (e.g. "Work", "Receipts", "Archive").
+/// Creates the target folder if it does not yet exist.
+/// Returns a list of `(source_path, dest_path)` pairs that can be reverted by `restore_moved_files`.
+pub fn move_thread_to_folder(
+    thread: &Thread,
+    target_folder_name: &str,
+    default_account_root: &Path,
+) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let mut moves = Vec::new();
+
+    for msg in &thread.messages {
+        if let Some(ref path_str) = msg.file_path {
+            let src = PathBuf::from(path_str);
+            let account_root = find_account_root_for_message(&src)
+                .unwrap_or_else(|| default_account_root.to_path_buf());
+            let target_folder = account_root.join(target_folder_name);
+            match move_message_to_folder(&src, &target_folder) {
+                Ok(moved) => moves.push(moved),
+                Err(err) => {
+                    let _ = restore_moved_files(&moves);
+                    return Err(format!("Move error: {err}"));
+                }
+            }
+        }
+    }
+
+    Ok(moves)
+}
+
+/// Permanently unlinks/deletes all files in the given Trash folder (`cur`, `new`, and `tmp`).
+/// Returns the number of permanently deleted message files.
+pub fn empty_trash_folder(trash_folder: &Path) -> std::io::Result<usize> {
+    let mut deleted_count = 0;
+    for subdir in &["cur", "new", "tmp"] {
+        let p = trash_folder.join(subdir);
+        if let Ok(entries) = fs::read_dir(&p) {
+            for entry in entries.flatten() {
+                let file_path = entry.path();
+                if file_path.is_file() {
+                    if fs::remove_file(&file_path).is_ok() {
+                        deleted_count += 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(deleted_count)
+}
+
+/// Discovers all available Maildir folders in an account directory, combining standard
+/// mailboxes with any custom folders discovered on disk.
+pub fn discover_folders_for_account(account_root: &Path) -> Vec<String> {
+    let mut folders = Vec::new();
+    let standard = ["INBOX", "Archive", "Trash", "Sent", "Drafts"];
+    for std_f in standard {
+        folders.push(std_f.to_string());
+    }
+
+    if let Ok(entries) = fs::read_dir(account_root) {
+        for entry in entries.flatten() {
+            if let Ok(ft) = entry.file_type() {
+                if ft.is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if !name.starts_with('.') && !standard.iter().any(|&s| s.eq_ignore_ascii_case(&name)) {
+                        folders.push(name);
+                    }
+                }
+            }
+        }
+    }
+
+    folders.sort();
+    folders.dedup();
+    folders
+}
+
 /// Reverses a set of file moves (e.g. for the 10-second Undo action).
 pub fn restore_moved_files(moves: &[(PathBuf, PathBuf)]) -> Result<(), String> {
     for (original_path, current_path) in moves {
@@ -1277,6 +1353,72 @@ Got it, testing now!\r\n";
         restore_moved_files(&all_moves).expect("undo success");
         let restored_threads = scanner.scan_folder(&account_root.join("INBOX"));
         assert_eq!(restored_threads.len(), 3);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_move_thread_to_custom_folder_and_undo() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_custom_move_test_{}", std::process::id()));
+        let account_root = temp_dir.join("demo");
+        let inbox_new = account_root.join("INBOX").join("new");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&inbox_new).unwrap();
+
+        let email = "From: Boss <boss@work.com>\r\nSubject: Project Alpha\r\nDate: Mon, 20 Oct 2026 10:00:00 -0600\r\nMessage-ID: <alpha@work.com>\r\nContent-Type: text/plain\r\n\r\nReview";
+        let f1 = inbox_new.join("201.mail:2,");
+        fs::write(&f1, email).unwrap();
+
+        let scanner = MaildirScanner::new(temp_dir.clone());
+        let threads = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(threads.len(), 1);
+
+        // Move to custom folder "Projects"
+        let moves = move_thread_to_folder(&threads[0], "Projects", &account_root).expect("move success");
+        assert_eq!(moves.len(), 1);
+
+        let inbox_after = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(inbox_after.len(), 0);
+
+        let projects_threads = scanner.scan_folder(&account_root.join("Projects"));
+        assert_eq!(projects_threads.len(), 1);
+        assert_eq!(projects_threads[0].subject, "Project Alpha");
+
+        // Undo move
+        restore_moved_files(&moves).expect("undo success");
+        let inbox_restored = scanner.scan_folder(&account_root.join("INBOX"));
+        assert_eq!(inbox_restored.len(), 1);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_empty_trash_folder_and_discovery() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_empty_trash_test_{}", std::process::id()));
+        let account_root = temp_dir.join("demo");
+        let trash_cur = account_root.join("Trash").join("cur");
+        let trash_new = account_root.join("Trash").join("new");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&trash_cur).unwrap();
+        fs::create_dir_all(&trash_new).unwrap();
+
+        fs::write(trash_cur.join("msg1:2,S"), "Trash 1").unwrap();
+        fs::write(trash_new.join("msg2:2,"), "Trash 2").unwrap();
+
+        // Check discovery includes standard folders
+        let folders = discover_folders_for_account(&account_root);
+        assert!(folders.contains(&"Trash".to_string()));
+        assert!(folders.contains(&"INBOX".to_string()));
+
+        // Empty trash
+        let deleted = empty_trash_folder(&account_root.join("Trash")).expect("empty success");
+        assert_eq!(deleted, 2);
+
+        // Verify files are unlinked
+        let cur_entries = fs::read_dir(&trash_cur).unwrap().count();
+        let new_entries = fs::read_dir(&trash_new).unwrap().count();
+        assert_eq!(cur_entries, 0);
+        assert_eq!(new_entries, 0);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

@@ -127,6 +127,18 @@ const ACTIONS: &[PaletteAction] = &[
         id: "trash",
     },
     PaletteAction {
+        title: "Move Conversation to Folder...",
+        category: "Message",
+        shortcut: Some("v"),
+        id: "move_folder",
+    },
+    PaletteAction {
+        title: "Empty Trash",
+        category: "Mailbox",
+        shortcut: None,
+        id: "empty_trash",
+    },
+    PaletteAction {
         title: "Toggle Star / Flag",
         category: "Message",
         shortcut: Some("s"),
@@ -137,6 +149,24 @@ const ACTIONS: &[PaletteAction] = &[
         category: "Appearance",
         shortcut: None,
         id: "theme_attic_olive",
+    },
+    PaletteAction {
+        title: "Theme: Spartan Crimson (Greek)",
+        category: "Appearance",
+        shortcut: None,
+        id: "theme_spartan_crimson",
+    },
+    PaletteAction {
+        title: "Theme: Byzantine Bronze (Greek)",
+        category: "Appearance",
+        shortcut: None,
+        id: "theme_byzantine_bronze",
+    },
+    PaletteAction {
+        title: "Theme: Attic Amber (Greek)",
+        category: "Appearance",
+        shortcut: None,
+        id: "theme_attic_amber",
     },
     PaletteAction {
         title: "Theme: Corinthian Bronze (Greek)",
@@ -320,6 +350,9 @@ fn execute_action(
 ) {
     match id {
         "theme_attic_olive" => theme_manager.set_theme("attic-olive"),
+        "theme_spartan_crimson" => theme_manager.set_theme("spartan-crimson"),
+        "theme_byzantine_bronze" => theme_manager.set_theme("byzantine-bronze"),
+        "theme_attic_amber" => theme_manager.set_theme("attic-amber"),
         "theme_corinthian_bronze" => theme_manager.set_theme("corinthian-bronze"),
         "theme_catppuccin" => theme_manager.set_theme("catppuccin"),
         "theme_everforest" => theme_manager.set_theme("everforest"),
