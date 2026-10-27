@@ -20,6 +20,8 @@ pub struct OutboxMessage {
     pub to: String,
     pub subject: String,
     pub body: String,
+    #[serde(default)]
+    pub body_html: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     #[serde(default)]
@@ -60,6 +62,30 @@ impl OutboxMessage {
         references: Vec<String>,
         attachments: Vec<AttachmentPayload>,
     ) -> Self {
+        Self::with_html_and_attachments(
+            account_name,
+            from,
+            to,
+            subject,
+            body,
+            None,
+            in_reply_to,
+            references,
+            attachments,
+        )
+    }
+
+    pub fn with_html_and_attachments(
+        account_name: &str,
+        from: &str,
+        to: &str,
+        subject: &str,
+        body: &str,
+        body_html: Option<String>,
+        in_reply_to: Option<String>,
+        references: Vec<String>,
+        attachments: Vec<AttachmentPayload>,
+    ) -> Self {
         let now = Utc::now();
         let id = format!("{}.{}.iris", now.timestamp_micros(), std::process::id());
         Self {
@@ -69,6 +95,7 @@ impl OutboxMessage {
             to: to.to_string(),
             subject: subject.to_string(),
             body: body.to_string(),
+            body_html,
             in_reply_to,
             references,
             attachments,
@@ -102,48 +129,133 @@ impl OutboxMessage {
             msg_str.push_str(&format!("References: {refs}\r\n"));
         }
 
-        if self.attachments.is_empty() {
-            msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n\r\n");
-            msg_str.push_str(&self.body);
-            msg_str.push_str("\r\n");
-        } else {
-            let boundary = format!(
-                "----=_IrisBoundary_{}_{}",
-                self.queued_at.timestamp_micros(),
-                self.id.replace('.', "_")
-            );
-            msg_str.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"));
-
-            // Text part
-            msg_str.push_str(&format!("--{boundary}\r\n"));
-            msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n");
-            msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
-            msg_str.push_str(&self.body);
-            msg_str.push_str("\r\n\r\n");
-
-            // Attachments
-            for att in &self.attachments {
-                let file_path = Path::new(&att.path);
-                if let Ok(bytes) = fs::read(file_path) {
-                    use base64::Engine;
-                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-
-                    msg_str.push_str(&format!("--{boundary}\r\n"));
-                    msg_str.push_str(&format!("Content-Type: {}; name=\"{}\"\r\n", att.content_type, att.filename));
-                    msg_str.push_str(&format!("Content-Disposition: attachment; filename=\"{}\"\r\n", att.filename));
-                    msg_str.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
-
-                    for chunk in b64.as_bytes().chunks(76) {
-                        if let Ok(line) = std::str::from_utf8(chunk) {
-                            msg_str.push_str(line);
-                            msg_str.push_str("\r\n");
-                        }
-                    }
-                    msg_str.push_str("\r\n");
-                }
+        match (&self.body_html, self.attachments.is_empty()) {
+            (None, true) => {
+                msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n\r\n");
+                msg_str.push_str(&self.body);
+                msg_str.push_str("\r\n");
             }
+            (Some(html), true) => {
+                let alt_boundary = format!(
+                    "----=_IrisAlt_{}_{}",
+                    self.queued_at.timestamp_micros(),
+                    self.id.replace('.', "_")
+                );
+                msg_str.push_str(&format!("Content-Type: multipart/alternative; boundary=\"{alt_boundary}\"\r\n\r\n"));
 
-            msg_str.push_str(&format!("--{boundary}--\r\n"));
+                // Text part
+                msg_str.push_str(&format!("--{alt_boundary}\r\n"));
+                msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n");
+                msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
+                msg_str.push_str(&self.body);
+                msg_str.push_str("\r\n\r\n");
+
+                // HTML part
+                msg_str.push_str(&format!("--{alt_boundary}\r\n"));
+                msg_str.push_str("Content-Type: text/html; charset=utf-8\r\n");
+                msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
+                msg_str.push_str(html);
+                msg_str.push_str("\r\n\r\n");
+
+                msg_str.push_str(&format!("--{alt_boundary}--\r\n"));
+            }
+            (None, false) => {
+                let boundary = format!(
+                    "----=_IrisBoundary_{}_{}",
+                    self.queued_at.timestamp_micros(),
+                    self.id.replace('.', "_")
+                );
+                msg_str.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"));
+
+                // Text part
+                msg_str.push_str(&format!("--{boundary}\r\n"));
+                msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n");
+                msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
+                msg_str.push_str(&self.body);
+                msg_str.push_str("\r\n\r\n");
+
+                // Attachments
+                for att in &self.attachments {
+                    let file_path = Path::new(&att.path);
+                    if let Ok(bytes) = fs::read(file_path) {
+                        use base64::Engine;
+                        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+                        msg_str.push_str(&format!("--{boundary}\r\n"));
+                        msg_str.push_str(&format!("Content-Type: {}; name=\"{}\"\r\n", att.content_type, att.filename));
+                        msg_str.push_str(&format!("Content-Disposition: attachment; filename=\"{}\"\r\n", att.filename));
+                        msg_str.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
+
+                        for chunk in b64.as_bytes().chunks(76) {
+                            if let Ok(line) = std::str::from_utf8(chunk) {
+                                msg_str.push_str(line);
+                                msg_str.push_str("\r\n");
+                            }
+                        }
+                        msg_str.push_str("\r\n");
+                    }
+                }
+
+                msg_str.push_str(&format!("--{boundary}--\r\n"));
+            }
+            (Some(html), false) => {
+                let mixed_boundary = format!(
+                    "----=_IrisMixed_{}_{}",
+                    self.queued_at.timestamp_micros(),
+                    self.id.replace('.', "_")
+                );
+                let alt_boundary = format!(
+                    "----=_IrisAlt_{}_{}",
+                    self.queued_at.timestamp_micros(),
+                    self.id.replace('.', "_")
+                );
+
+                msg_str.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{mixed_boundary}\"\r\n\r\n"));
+
+                // Nested multipart/alternative
+                msg_str.push_str(&format!("--{mixed_boundary}\r\n"));
+                msg_str.push_str(&format!("Content-Type: multipart/alternative; boundary=\"{alt_boundary}\"\r\n\r\n"));
+
+                // Text part
+                msg_str.push_str(&format!("--{alt_boundary}\r\n"));
+                msg_str.push_str("Content-Type: text/plain; charset=utf-8\r\n");
+                msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
+                msg_str.push_str(&self.body);
+                msg_str.push_str("\r\n\r\n");
+
+                // HTML part
+                msg_str.push_str(&format!("--{alt_boundary}\r\n"));
+                msg_str.push_str("Content-Type: text/html; charset=utf-8\r\n");
+                msg_str.push_str("Content-Transfer-Encoding: 8bit\r\n\r\n");
+                msg_str.push_str(html);
+                msg_str.push_str("\r\n\r\n");
+
+                msg_str.push_str(&format!("--{alt_boundary}--\r\n\r\n"));
+
+                // Attachments
+                for att in &self.attachments {
+                    let file_path = Path::new(&att.path);
+                    if let Ok(bytes) = fs::read(file_path) {
+                        use base64::Engine;
+                        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+                        msg_str.push_str(&format!("--{mixed_boundary}\r\n"));
+                        msg_str.push_str(&format!("Content-Type: {}; name=\"{}\"\r\n", att.content_type, att.filename));
+                        msg_str.push_str(&format!("Content-Disposition: attachment; filename=\"{}\"\r\n", att.filename));
+                        msg_str.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
+
+                        for chunk in b64.as_bytes().chunks(76) {
+                            if let Ok(line) = std::str::from_utf8(chunk) {
+                                msg_str.push_str(line);
+                                msg_str.push_str("\r\n");
+                            }
+                        }
+                        msg_str.push_str("\r\n");
+                    }
+                }
+
+                msg_str.push_str(&format!("--{mixed_boundary}--\r\n"));
+            }
         }
 
         msg_str
@@ -389,6 +501,72 @@ mod tests {
         let part = parsed.attachments().next().unwrap();
         assert_eq!(part.attachment_name(), Some("test_note.txt"));
         assert_eq!(part.contents(), b"Hello attached world!");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_outbox_message_with_html_rfc822() {
+        let msg = OutboxMessage::with_html_and_attachments(
+            "demo",
+            "bry@omarchy.org",
+            "alex@hermes.dev",
+            "HTML Alternative Test",
+            "Plain text markdown version",
+            Some("<h1>Styled HTML Version</h1><p>Paragraph</p>".to_string()),
+            None,
+            vec![],
+            vec![],
+        );
+
+        let rfc822 = msg.to_rfc822();
+        assert!(rfc822.contains("Content-Type: multipart/alternative; boundary=\""));
+        assert!(rfc822.contains("Content-Type: text/plain; charset=utf-8"));
+        assert!(rfc822.contains("Content-Type: text/html; charset=utf-8"));
+
+        let parsed = mail_parser::MessageParser::default().parse(rfc822.as_bytes()).unwrap();
+        assert_eq!(parsed.body_text(0).unwrap().trim(), "Plain text markdown version");
+        assert!(parsed.body_html(0).unwrap().contains("Styled HTML Version"));
+    }
+
+    #[test]
+    fn test_outbox_message_with_html_and_attachments_rfc822() {
+        let temp_dir = std::env::temp_dir().join(format!("iris_outbox_full_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let test_file = temp_dir.join("document.pdf");
+        fs::write(&test_file, b"%PDF-1.4 sample content").unwrap();
+
+        let att = AttachmentPayload {
+            filename: "document.pdf".to_string(),
+            path: test_file.to_string_lossy().to_string(),
+            content_type: "application/pdf".to_string(),
+        };
+
+        let msg = OutboxMessage::with_html_and_attachments(
+            "demo",
+            "bry@omarchy.org",
+            "alex@hermes.dev",
+            "Full MIME Test",
+            "Plain body here",
+            Some("<p>HTML body here</p>".to_string()),
+            None,
+            vec![],
+            vec![att],
+        );
+
+        let rfc822 = msg.to_rfc822();
+        assert!(rfc822.contains("Content-Type: multipart/mixed; boundary=\""));
+        assert!(rfc822.contains("Content-Type: multipart/alternative; boundary=\""));
+
+        let parsed = mail_parser::MessageParser::default().parse(rfc822.as_bytes()).unwrap();
+        assert_eq!(parsed.body_text(0).unwrap().trim(), "Plain body here");
+        assert!(parsed.body_html(0).unwrap().contains("HTML body here"));
+        assert_eq!(parsed.attachments().count(), 1);
+        let part = parsed.attachments().next().unwrap();
+        assert_eq!(part.attachment_name(), Some("document.pdf"));
+        assert_eq!(part.contents(), b"%PDF-1.4 sample content");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

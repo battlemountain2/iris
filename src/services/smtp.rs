@@ -53,32 +53,68 @@ pub fn send_message_transport(
         builder = builder.references(format!("<{clean_id}>"));
     }
 
-    let lettre_msg = if msg.attachments.is_empty() {
-        builder
-            .header(ContentType::TEXT_PLAIN)
-            .body(msg.body.clone())
-            .map_err(|e| format!("Failed to build email message: {e}"))?
-    } else {
-        let mut multipart = lettre::message::MultiPart::mixed()
-            .singlepart(lettre::message::SinglePart::plain(msg.body.clone()));
-
-        for att in &msg.attachments {
-            let file_path = Path::new(&att.path);
-            if let Ok(bytes) = std::fs::read(file_path) {
-                let ct: ContentType = att
-                    .content_type
-                    .parse()
-                    .unwrap_or_else(|_| "application/octet-stream".parse().unwrap());
-
-                let attachment_part = lettre::message::Attachment::new(att.filename.clone())
-                    .body(bytes, ct);
-                multipart = multipart.singlepart(attachment_part);
-            }
+    let lettre_msg = match (&msg.body_html, msg.attachments.is_empty()) {
+        (None, true) => {
+            builder
+                .header(ContentType::TEXT_PLAIN)
+                .body(msg.body.clone())
+                .map_err(|e| format!("Failed to build email message: {e}"))?
         }
+        (Some(html), true) => {
+            let alt = lettre::message::MultiPart::alternative()
+                .singlepart(lettre::message::SinglePart::plain(msg.body.clone()))
+                .singlepart(lettre::message::SinglePart::html(html.clone()));
+            builder
+                .multipart(alt)
+                .map_err(|e| format!("Failed to build multipart/alternative message: {e}"))?
+        }
+        (None, false) => {
+            let mut multipart = lettre::message::MultiPart::mixed()
+                .singlepart(lettre::message::SinglePart::plain(msg.body.clone()));
 
-        builder
-            .multipart(multipart)
-            .map_err(|e| format!("Failed to build multipart email message: {e}"))?
+            for att in &msg.attachments {
+                let file_path = Path::new(&att.path);
+                if let Ok(bytes) = std::fs::read(file_path) {
+                    let ct: ContentType = att
+                        .content_type
+                        .parse()
+                        .unwrap_or_else(|_| "application/octet-stream".parse().unwrap());
+
+                    let attachment_part = lettre::message::Attachment::new(att.filename.clone())
+                        .body(bytes, ct);
+                    multipart = multipart.singlepart(attachment_part);
+                }
+            }
+
+            builder
+                .multipart(multipart)
+                .map_err(|e| format!("Failed to build multipart email message: {e}"))?
+        }
+        (Some(html), false) => {
+            let alt = lettre::message::MultiPart::alternative()
+                .singlepart(lettre::message::SinglePart::plain(msg.body.clone()))
+                .singlepart(lettre::message::SinglePart::html(html.clone()));
+
+            let mut mixed = lettre::message::MultiPart::mixed().multipart(alt);
+
+            for att in &msg.attachments {
+                let file_path = Path::new(&att.path);
+                if let Ok(bytes) = std::fs::read(file_path) {
+                    let ct: ContentType = att
+                        .content_type
+                        .parse()
+                        .unwrap_or_else(|_| "application/octet-stream".parse().unwrap());
+
+                    let attachment_part = lettre::message::Attachment::new(att.filename.clone())
+                        .body(bytes, ct);
+                    mixed = mixed.singlepart(attachment_part);
+                }
+            }
+
+            builder
+                .multipart(mixed)
+                .map_err(|e| format!("Failed to build multipart email message with attachments: {e}"))?
+        }
     };
 
     // 2. Dispatch via real SMTP if host and credentials configured

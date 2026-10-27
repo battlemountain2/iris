@@ -79,6 +79,12 @@ const ACTIONS: &[PaletteAction] = &[
         id: "shortcuts",
     },
     PaletteAction {
+        title: "Preferences & Accounts",
+        category: "Settings",
+        shortcut: Some("Ctrl+,"),
+        id: "settings",
+    },
+    PaletteAction {
         title: "Reply to Sender",
         category: "Message",
         shortcut: Some("r"),

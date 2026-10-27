@@ -452,3 +452,16 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
   color: alpha(@theme_text, 0.50);
   margin: 0 2px;
 }
+
+/* ========================================================================= */
+/* 7. PREFERENCES & SETTINGS DIALOG                                          */
+/* ========================================================================= */
+.iris-settings-dialog {
+  background-color: alpha(@theme_bg, 0.95);
+  backdrop-filter: blur(24px);
+  color: @theme_text;
+}
+
+.iris-settings-dialog preferencespage {
+  background-color: transparent;
+}

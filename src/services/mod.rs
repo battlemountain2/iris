@@ -5,6 +5,7 @@ pub mod config;
 pub mod draft;
 pub mod html_renderer;
 pub mod maildir;
+pub mod markdown;
 pub mod notmuch;
 pub mod outbox;
 pub mod search;

@@ -10,6 +10,7 @@ pub struct SidebarView {
     pub container: gtk::Box,
     pub list_box: gtk::ListBox,
     pub sync_btn: gtk::Button,
+    pub settings_btn: gtk::Button,
     pub badges: RefCell<HashMap<String, gtk::Label>>,
     pub rows: RefCell<HashMap<String, gtk::ListBoxRow>>,
 }
@@ -41,6 +42,14 @@ impl SidebarView {
         sync_btn.add_css_class("flat");
         header.pack_end(&sync_btn);
 
+        // Settings button in header
+        let settings_btn = gtk::Button::builder()
+            .icon_name("emblem-system-symbolic")
+            .tooltip_text("Preferences & Accounts (Ctrl+,)")
+            .build();
+        settings_btn.add_css_class("flat");
+        header.pack_end(&settings_btn);
+
         container.append(&header);
 
         // Scrolled window for mailboxes
@@ -65,6 +74,7 @@ impl SidebarView {
             container,
             list_box,
             sync_btn,
+            settings_btn,
             badges: RefCell::new(badges_map),
             rows: RefCell::new(rows_map),
         }

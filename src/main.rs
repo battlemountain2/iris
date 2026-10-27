@@ -410,12 +410,13 @@ fn build_ui(app: &adw::Application) {
             })
             .collect();
 
-        let outbox_msg = services::outbox::OutboxMessage::with_attachments(
+        let outbox_msg = services::outbox::OutboxMessage::with_html_and_attachments(
             &payload.account_id,
             &payload.from,
             &payload.to,
             &payload.subject,
             &payload.body,
+            payload.body_html.clone(),
             payload.in_reply_to.clone(),
             payload.references.clone(),
             att_payloads,
@@ -658,6 +659,27 @@ fn build_ui(app: &adw::Application) {
         let ts = trigger_sync.clone();
         sidebar_view.sync_btn.connect_clicked(move |_| {
             ts();
+        });
+    }
+
+    // Preferences & Settings Dialog (Ctrl+,)
+    let settings_dialog = Rc::new(ui::SettingsDialog::new(
+        &iris_config,
+        theme_manager.clone(),
+        trigger_sync.clone(),
+    ));
+    let do_settings = {
+        let settings_dialog = settings_dialog.clone();
+        let win = window.clone();
+        Rc::new(move || {
+            settings_dialog.present(&win);
+        })
+    };
+
+    {
+        let ds = do_settings.clone();
+        sidebar_view.settings_btn.connect_clicked(move |_| {
+            ds();
         });
     }
 
@@ -1067,6 +1089,7 @@ fn build_ui(app: &adw::Application) {
         let do_star = do_star.clone();
         let trigger_sync_palette = trigger_sync.clone();
         let do_shortcuts_palette = do_shortcuts.clone();
+        let do_settings_palette = do_settings.clone();
 
         Rc::new(ui::CommandPalette::with_action_handler(
             theme_manager.clone(),
@@ -1086,6 +1109,7 @@ fn build_ui(app: &adw::Application) {
                 "star" => do_star(),
                 "sync" => trigger_sync_palette(),
                 "shortcuts" => do_shortcuts_palette(),
+                "settings" => do_settings_palette(),
                 _ => {}
             },
         ))
@@ -1122,6 +1146,7 @@ fn build_ui(app: &adw::Application) {
         on_back: do_back,
         on_sync: trigger_sync.clone(),
         on_show_shortcuts: do_shortcuts.clone(),
+        on_settings: do_settings.clone(),
         on_undo: do_undo.clone(),
         on_nav_folder: {
             let sidebar_view = sidebar_view.clone();

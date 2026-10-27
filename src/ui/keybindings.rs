@@ -23,6 +23,7 @@ pub struct KeybindingActions {
     pub on_back: Rc<dyn Fn()>,
     pub on_sync: Rc<dyn Fn()>,
     pub on_show_shortcuts: Rc<dyn Fn()>,
+    pub on_settings: Rc<dyn Fn()>,
     pub on_undo: Rc<dyn Fn()>,
     pub on_nav_folder: Rc<dyn Fn(&str)>,
 }
@@ -60,6 +61,12 @@ pub fn setup_window_keybindings(
         // Ctrl+R: Global Synchronize Mailboxes
         if modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) && key == Key::r {
             (actions_clone.on_sync)();
+            return glib::Propagation::Stop;
+        }
+
+        // Ctrl+,: Preferences & Settings
+        if modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) && key == Key::comma {
+            (actions_clone.on_settings)();
             return glib::Propagation::Stop;
         }
 
@@ -240,6 +247,7 @@ mod tests {
         let inv2 = invoked.clone();
         let inv3 = invoked.clone();
         let inv4 = invoked.clone();
+        let inv5 = invoked.clone();
 
         let actions = KeybindingActions {
             on_archive: Rc::new(move || inv1.store(true, Ordering::SeqCst)),
@@ -253,6 +261,7 @@ mod tests {
             on_back: Rc::new(|| {}),
             on_sync: Rc::new(move || inv2.store(true, Ordering::SeqCst)),
             on_show_shortcuts: Rc::new(move || inv3.store(true, Ordering::SeqCst)),
+            on_settings: Rc::new(move || inv5.store(true, Ordering::SeqCst)),
             on_undo: Rc::new(move || inv4.store(true, Ordering::SeqCst)),
             on_nav_folder: Rc::new(|_| {}),
         };
@@ -266,6 +275,10 @@ mod tests {
 
         invoked.store(false, Ordering::SeqCst);
         (actions.on_show_shortcuts)();
+        assert!(invoked.load(Ordering::SeqCst));
+
+        invoked.store(false, Ordering::SeqCst);
+        (actions.on_settings)();
         assert!(invoked.load(Ordering::SeqCst));
 
         invoked.store(false, Ordering::SeqCst);

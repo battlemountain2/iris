@@ -29,6 +29,7 @@ pub struct ComposePayload {
     pub to: String,
     pub subject: String,
     pub body: String,
+    pub body_html: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub draft_file_path: Option<PathBuf>,
@@ -149,6 +150,13 @@ impl ComposeDialog {
         attach_btn.add_css_class("flat");
         header.pack_end(&attach_btn);
 
+        let preview_btn = gtk::ToggleButton::builder()
+            .icon_name("view-reveal-symbolic")
+            .tooltip_text("Toggle Markdown Preview (Ctrl+P)")
+            .build();
+        preview_btn.add_css_class("flat");
+        header.pack_end(&preview_btn);
+
         let send_btn = gtk::Button::builder()
             .label("Send")
             .tooltip_text("Send message (10-second Undo window)")
@@ -261,8 +269,92 @@ impl ComposeDialog {
             .build();
         body_view.add_css_class("iris-compose-body");
 
+        // Live Markdown Preview Panel
+        let preview_scrolled = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vexpand(true)
+            .margin_start(16)
+            .margin_end(16)
+            .margin_bottom(12)
+            .visible(false)
+            .build();
+
+        let preview_label = gtk::Label::builder()
+            .use_markup(true)
+            .wrap(true)
+            .selectable(true)
+            .xalign(0.0)
+            .yalign(0.0)
+            .margin_start(12)
+            .margin_end(12)
+            .margin_top(12)
+            .margin_bottom(12)
+            .build();
+        preview_scrolled.set_child(Some(&preview_label));
+
+        // Connect Markdown formatting shortcuts (Ctrl+B, Ctrl+I, Ctrl+K, Ctrl+P)
+        {
+            let body_ctrl = gtk::EventControllerKey::new();
+            let preview_btn_key = preview_btn.clone();
+            body_ctrl.connect_key_pressed(move |ctrl, key, _code, modifier| {
+                if modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
+                    let Some(view) = ctrl.widget().and_downcast::<gtk::TextView>() else {
+                        return glib::Propagation::Proceed;
+                    };
+                    let buffer = view.buffer();
+
+                    match key {
+                        gtk::gdk::Key::b | gtk::gdk::Key::B => {
+                            wrap_selection(&buffer, "**", "**");
+                            return glib::Propagation::Stop;
+                        }
+                        gtk::gdk::Key::i | gtk::gdk::Key::I => {
+                            wrap_selection(&buffer, "*", "*");
+                            return glib::Propagation::Stop;
+                        }
+                        gtk::gdk::Key::k | gtk::gdk::Key::K => {
+                            wrap_selection(&buffer, "[", "](https://)");
+                            return glib::Propagation::Stop;
+                        }
+                        gtk::gdk::Key::p | gtk::gdk::Key::P => {
+                            preview_btn_key.set_active(!preview_btn_key.is_active());
+                            return glib::Propagation::Stop;
+                        }
+                        _ => {}
+                    }
+                }
+                glib::Propagation::Proceed
+            });
+            body_view.add_controller(body_ctrl);
+        }
+
+        // Connect Preview Toggle
+        {
+            let body_view_prev = body_view.clone();
+            let prev_lbl = preview_label.clone();
+            let scr_edit = scrolled.clone();
+            let scr_prev = preview_scrolled.clone();
+
+            preview_btn.connect_toggled(move |btn| {
+                if btn.is_active() {
+                    let buffer = body_view_prev.buffer();
+                    let (s, e) = buffer.bounds();
+                    let text = buffer.text(&s, &e, false).to_string();
+                    let markup = crate::services::markdown::markdown_to_pango(&text);
+                    prev_lbl.set_markup(&markup);
+                    scr_edit.set_visible(false);
+                    scr_prev.set_visible(true);
+                } else {
+                    scr_prev.set_visible(false);
+                    scr_edit.set_visible(true);
+                    body_view_prev.grab_focus();
+                }
+            });
+        }
+
         scrolled.set_child(Some(&body_view));
         vbox.append(&scrolled);
+        vbox.append(&preview_scrolled);
 
         dialog.set_child(Some(&vbox));
 
@@ -300,12 +392,19 @@ impl ComposeDialog {
             let draft_path = draft_path_send.borrow_mut().take();
             let atts = attachments_for_send.borrow().clone();
 
+            let body_html = if crate::services::markdown::contains_markdown(&body) {
+                Some(crate::services::markdown::markdown_to_html(&body))
+            } else {
+                None
+            };
+
             let payload = ComposePayload {
                 account_id: acct.id.to_string(),
                 from: acct.email.to_string(),
                 to,
                 subject,
                 body,
+                body_html,
                 in_reply_to: in_reply_to_clone.borrow().clone(),
                 references: references_clone.borrow().clone(),
                 draft_file_path: draft_path,
@@ -734,6 +833,20 @@ pub fn format_forward_body(
     format!(
         "\n\n---------- Forwarded message ---------\nFrom: {from}\nDate: {date_str}\nSubject: {subject}\nTo: {to_str}\n\n{original_body}"
     )
+}
+
+/// Wraps the current text selection or cursor position with markdown syntax markers.
+fn wrap_selection(buffer: &gtk::TextBuffer, prefix: &str, suffix: &str) {
+    if let Some((mut start, mut end)) = buffer.selection_bounds() {
+        let text = buffer.text(&start, &end, false).to_string();
+        buffer.delete(&mut start, &mut end);
+        let wrapped = format!("{prefix}{text}{suffix}");
+        buffer.insert(&mut start, &wrapped);
+    } else {
+        let mut iter = buffer.iter_at_mark(&buffer.get_insert());
+        let wrapped = format!("{prefix}{suffix}");
+        buffer.insert(&mut iter, &wrapped);
+    }
 }
 
 #[cfg(test)]
