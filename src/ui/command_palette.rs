@@ -61,6 +61,24 @@ const ACTIONS: &[PaletteAction] = &[
         id: "nav_archive",
     },
     PaletteAction {
+        title: "Go to Drafts",
+        category: "Navigation",
+        shortcut: Some("g d"),
+        id: "nav_drafts",
+    },
+    PaletteAction {
+        title: "Go to Trash",
+        category: "Navigation",
+        shortcut: Some("g t"),
+        id: "nav_trash",
+    },
+    PaletteAction {
+        title: "Keyboard Shortcuts Cheatsheet",
+        category: "Help",
+        shortcut: Some("?"),
+        id: "shortcuts",
+    },
+    PaletteAction {
         title: "Reply to Sender",
         category: "Message",
         shortcut: Some("r"),

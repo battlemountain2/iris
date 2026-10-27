@@ -579,16 +579,30 @@ fn build_ui(app: &adw::Application) {
         }
     });
 
-    // Sidebar Sync Button (Background worker with animated spinner)
-    {
+    // Last undo action tracker for keyboard <z> and <Ctrl+Z>
+    let last_undo: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+
+    // Keyboard Shortcuts Cheatsheet Dialog (?)
+    let shortcuts_dialog = Rc::new(ui::ShortcutsDialog::new());
+    let do_shortcuts = {
+        let shortcuts_dialog = shortcuts_dialog.clone();
+        let win = window.clone();
+        Rc::new(move || {
+            shortcuts_dialog.present(&win);
+        })
+    };
+
+    // Global & Sidebar Sync Handler (Background worker with animated spinner)
+    let is_syncing = Rc::new(Cell::new(false));
+    let trigger_sync = {
         let sync_btn = sidebar_view.sync_btn.clone();
         let mail_root = mail_root.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
         let app_sync = app.clone();
-        let is_syncing = Rc::new(Cell::new(false));
+        let is_syncing = is_syncing.clone();
 
-        sync_btn.clone().connect_clicked(move |_| {
+        Rc::new(move || {
             if is_syncing.get() {
                 return;
             }
@@ -637,6 +651,13 @@ fn build_ui(app: &adw::Application) {
                     }
                 }
             });
+        })
+    };
+
+    {
+        let ts = trigger_sync.clone();
+        sidebar_view.sync_btn.connect_clicked(move |_| {
+            ts();
         });
     }
 
@@ -645,26 +666,34 @@ fn build_ui(app: &adw::Application) {
         let state = app_state.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
+        let last_undo = last_undo.clone();
 
         Rc::new(move |thread: Thread| {
             let subject = thread.subject.clone();
             let folder = state.current_folder.borrow().clone();
             let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+            let last_undo = last_undo.clone();
             match services::maildir::archive_thread(&thread, &account_fallback) {
                 Ok(moves) => {
                     tracing::info!("Archived thread: '{}' ({} files moved)", subject, moves.len());
                     refresh_view();
                     let refresh_undo = refresh_view.clone();
+                    let subj_undo = subject.clone();
+                    let undo_action: Rc<dyn Fn()> = Rc::new(move || {
+                        if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                            tracing::error!("Failed to undo archive: {e}");
+                        } else {
+                            tracing::info!("Restored archived thread: '{subj_undo}'");
+                            refresh_undo();
+                        }
+                    });
+                    last_undo.replace(Some(undo_action.clone()));
+                    let undo_toast = undo_action.clone();
                     ui::show_undo_action_toast(
                         &toast_overlay,
                         &format!("Archived: {subject}"),
                         move || {
-                            if let Err(e) = services::maildir::restore_moved_files(&moves) {
-                                tracing::error!("Failed to undo archive: {e}");
-                            } else {
-                                tracing::info!("Restored archived thread: '{subject}'");
-                                refresh_undo();
-                            }
+                            undo_toast();
                         },
                     );
                 }
@@ -689,26 +718,34 @@ fn build_ui(app: &adw::Application) {
         let state = app_state.clone();
         let toast_overlay = toast_overlay.clone();
         let refresh_view = refresh_view.clone();
+        let last_undo = last_undo.clone();
 
         Rc::new(move |thread: Thread| {
             let subject = thread.subject.clone();
             let folder = state.current_folder.borrow().clone();
             let account_fallback = folder.parent().unwrap_or(&folder).to_path_buf();
+            let last_undo = last_undo.clone();
             match services::maildir::trash_thread(&thread, &account_fallback) {
                 Ok(moves) => {
                     tracing::info!("Moved thread to trash: '{}' ({} files moved)", subject, moves.len());
                     refresh_view();
                     let refresh_undo = refresh_view.clone();
+                    let subj_undo = subject.clone();
+                    let undo_action: Rc<dyn Fn()> = Rc::new(move || {
+                        if let Err(e) = services::maildir::restore_moved_files(&moves) {
+                            tracing::error!("Failed to undo trash: {e}");
+                        } else {
+                            tracing::info!("Restored trashed thread: '{subj_undo}'");
+                            refresh_undo();
+                        }
+                    });
+                    last_undo.replace(Some(undo_action.clone()));
+                    let undo_toast = undo_action.clone();
                     ui::show_undo_action_toast(
                         &toast_overlay,
                         &format!("Deleted: {subject}"),
                         move || {
-                            if let Err(e) = services::maildir::restore_moved_files(&moves) {
-                                tracing::error!("Failed to undo trash: {e}");
-                            } else {
-                                tracing::info!("Restored trashed thread: '{subject}'");
-                                refresh_undo();
-                            }
+                            undo_toast();
                         },
                     );
                 }
@@ -725,6 +762,15 @@ fn build_ui(app: &adw::Application) {
         Rc::new(move || {
             if let Some(thread) = state.selected_thread.borrow().clone() {
                 trash_fn(thread);
+            }
+        })
+    };
+
+    let do_undo = {
+        let last_undo = last_undo.clone();
+        Rc::new(move || {
+            if let Some(undo) = last_undo.borrow_mut().take() {
+                undo();
             }
         })
     };
@@ -1019,6 +1065,8 @@ fn build_ui(app: &adw::Application) {
         let do_reply_all = do_reply_all.clone();
         let do_forward = do_forward.clone();
         let do_star = do_star.clone();
+        let trigger_sync_palette = trigger_sync.clone();
+        let do_shortcuts_palette = do_shortcuts.clone();
 
         Rc::new(ui::CommandPalette::with_action_handler(
             theme_manager.clone(),
@@ -1027,6 +1075,8 @@ fn build_ui(app: &adw::Application) {
                 "nav_inbox" => sidebar_view.select_folder("inbox"),
                 "nav_sent" => sidebar_view.select_folder("folder:sent"),
                 "nav_archive" => sidebar_view.select_folder("folder:archive"),
+                "nav_drafts" => sidebar_view.select_folder("folder:drafts"),
+                "nav_trash" => sidebar_view.select_folder("folder:trash"),
                 "nav_feed" => sidebar_view.select_folder("view:feed"),
                 "reply" => do_reply(),
                 "reply_all" => do_reply_all(),
@@ -1034,6 +1084,8 @@ fn build_ui(app: &adw::Application) {
                 "archive" => do_archive(),
                 "trash" => do_trash(),
                 "star" => do_star(),
+                "sync" => trigger_sync_palette(),
+                "shortcuts" => do_shortcuts_palette(),
                 _ => {}
             },
         ))
@@ -1057,7 +1109,7 @@ fn build_ui(app: &adw::Application) {
         })
     };
 
-    // Global Vim & Modal Keybindings (Ctrl+K, j, k, c, e, #, r, a, f, s, u, /, Esc)
+    // Global Vim & Modal Keybindings (Ctrl+K, Ctrl+R, Ctrl+Z, j, k, c, e, #, r, a, f, s, u, z, ?, g chords, /, Esc)
     let key_actions = ui::KeybindingActions {
         on_archive: do_archive,
         on_trash: do_trash,
@@ -1068,6 +1120,15 @@ fn build_ui(app: &adw::Application) {
         on_toggle_read: do_toggle_read,
         on_focus_search: do_focus_search,
         on_back: do_back,
+        on_sync: trigger_sync.clone(),
+        on_show_shortcuts: do_shortcuts.clone(),
+        on_undo: do_undo.clone(),
+        on_nav_folder: {
+            let sidebar_view = sidebar_view.clone();
+            Rc::new(move |folder_id| {
+                sidebar_view.select_folder(folder_id);
+            })
+        },
     };
 
     ui::setup_window_keybindings(
@@ -1091,6 +1152,75 @@ fn build_ui(app: &adw::Application) {
             .timeout(5)
             .build();
         toast_overlay.add_toast(toast);
+    }
+
+    // Automatic Background Sync Daemon (based on config.sync.interval_seconds)
+    let sync_interval_secs = iris_config.sync.interval_seconds;
+    if sync_interval_secs > 0 {
+        let mail_root_auto = mail_root.clone();
+        let is_syncing_auto = is_syncing.clone();
+        let refresh_auto = refresh_view.clone();
+        let app_auto = app.clone();
+        let cfg_auto = iris_config.clone();
+
+        let count_unreads = move |sc: &services::maildir::MaildirScanner| -> u32 {
+            let mut total = 0;
+            if cfg_auto.accounts.is_empty() {
+                total += sc.count_unread_in_folder(&mail_root_auto.join("demo/INBOX"));
+                total += sc.count_unread_in_folder(&mail_root_auto.join("work/INBOX"));
+                total += sc.count_unread_in_folder(&mail_root_auto.join("icloud/INBOX"));
+            } else {
+                for acct in &cfg_auto.accounts {
+                    let acct_dir = acct
+                        .maildir_path
+                        .as_ref()
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| mail_root_auto.join(&acct.id));
+                    total += sc.count_unread_in_folder(&acct_dir.join("INBOX"));
+                }
+            }
+            total
+        };
+
+        let scanner_init = services::maildir::MaildirScanner::new(mail_root.clone());
+        let initial_unread = count_unreads(&scanner_init);
+        let last_unread_count = Rc::new(Cell::new(initial_unread));
+        let count_unreads_rc = Rc::new(count_unreads);
+
+        let mail_root_timer = mail_root.clone();
+        glib::timeout_add_seconds_local(sync_interval_secs as u32, move || {
+            if is_syncing_auto.get() {
+                return glib::ControlFlow::Continue;
+            }
+
+            is_syncing_auto.set(true);
+            let sync_flag = is_syncing_auto.clone();
+            let refresh_done = refresh_auto.clone();
+            let app_notif = app_auto.clone();
+            let scanner_done = services::maildir::MaildirScanner::new(mail_root_timer.clone());
+            let last_count = last_unread_count.clone();
+            let count_fn = count_unreads_rc.clone();
+
+            services::sync::run_sync_in_background(mail_root_timer.clone(), move |res| {
+                sync_flag.set(false);
+                refresh_done();
+
+                if let services::sync::SyncResult::SyncedRemote(_) | services::sync::SyncResult::RefreshedLocal(_) = res {
+                    let current_unread = count_fn(&scanner_done);
+                    let prev = last_count.get();
+                    last_count.set(current_unread);
+
+                    if current_unread > prev {
+                        let diff = current_unread - prev;
+                        let notif_title = if diff == 1 { "New Message - Iris" } else { "New Messages - Iris" };
+                        let notif_body = format!("You have {diff} new unread email(s)");
+                        send_desktop_notification(&app_notif, Some("iris-new-mail"), notif_title, &notif_body);
+                    }
+                }
+            });
+
+            glib::ControlFlow::Continue
+        });
     }
 
     window.present();
