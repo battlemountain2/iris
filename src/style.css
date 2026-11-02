@@ -270,27 +270,27 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 /* iOS Mail Inset Grouped Message Cards */
 .iris-thread-card,
 .iris-message-row {
-  margin: 3px 8px;
-  padding: 10px 12px;
+  margin: 4px 10px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background-color: alpha(@theme_surface, 0.65);
-  border: 1px solid alpha(@theme_border, 0.45);
-  box-shadow: 0 1px 3px alpha(#000000, 0.08);
+  background-color: alpha(@theme_surface, 0.75);
+  border: 1px solid alpha(@theme_border, 0.55);
+  box-shadow: 0 1px 4px alpha(#000000, 0.10);
   transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-thread-card:hover,
 .iris-message-row:hover {
   background-color: alpha(@theme_surface, 0.95);
-  border-color: alpha(@theme_accent, 0.35);
-  box-shadow: 0 2px 8px alpha(#000000, 0.14);
+  border-color: alpha(@theme_accent, 0.40);
+  box-shadow: 0 2px 10px alpha(#000000, 0.16);
 }
 
 .iris-thread-card:selected,
 .iris-message-row:selected {
-  background-color: alpha(@theme_accent, 0.18);
-  border: 1px solid alpha(@theme_accent, 0.55);
-  box-shadow: 0 2px 10px alpha(@theme_accent, 0.18);
+  background-color: alpha(@theme_accent, 0.20);
+  border: 1px solid alpha(@theme_accent, 0.60);
+  box-shadow: 0 2px 12px alpha(@theme_accent, 0.20);
 }
 
 .iris-thread-card:focus-visible,
@@ -372,7 +372,7 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 /* Typography Hierarchy (Apple SF Style) */
 .iris-row-sender {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
   color: @theme_text;
 }
@@ -383,9 +383,11 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 }
 
 .iris-row-subject {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: alpha(@theme_text, 0.92);
+  color: alpha(@theme_text, 0.95);
+  margin-top: 1px;
+  margin-bottom: 1px;
 }
 
 .iris-row-subject.unread-bold {
@@ -394,19 +396,19 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 }
 
 .iris-row-snippet {
-  font-size: 12px;
+  font-size: 12.5px;
   color: alpha(@theme_dim_text, 0.88);
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .iris-row-date {
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: @theme_dim_text;
+  color: alpha(@theme_dim_text, 0.85);
 }
 
 .iris-row-date.unread-accent {
-  color: #007aff;
+  color: #0a84ff;
   font-weight: 600;
 }
 
@@ -511,44 +513,45 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 /* Multi-Message Conversation Cards */
 .iris-conversation-card {
-  background-color: alpha(@theme_surface, 0.65);
-  border: 1px solid alpha(@theme_border, 0.70);
+  background-color: alpha(@theme_surface, 0.70);
+  border: 1px solid alpha(@theme_border, 0.80);
   border-radius: 16px;
-  padding: 22px 26px;
-  box-shadow: 0 4px 18px alpha(#000000, 0.14);
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px alpha(#000000, 0.16);
   transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-conversation-card.latest {
-  background-color: alpha(@theme_surface, 0.85);
-  border: 1px solid alpha(@theme_border, 0.90);
-  padding: 24px 28px;
+  background-color: alpha(@theme_surface, 0.95);
+  border: 1px solid alpha(@theme_border, 0.95);
+  padding: 26px 32px;
+  box-shadow: 0 8px 30px alpha(#000000, 0.24);
 }
 
 .iris-conversation-card.collapsed {
-  padding: 12px 18px;
-  background-color: alpha(@theme_surface, 0.40);
-  border-color: alpha(@theme_border, 0.45);
+  padding: 14px 20px;
+  background-color: alpha(@theme_surface, 0.45);
+  border-color: alpha(@theme_border, 0.50);
 }
 
 .iris-conversation-card.collapsed:hover {
-  background-color: alpha(@theme_surface, 0.65);
-  border-color: alpha(@theme_accent, 0.40);
+  background-color: alpha(@theme_surface, 0.70);
+  border-color: alpha(@theme_accent, 0.45);
 }
 
 .iris-card-divider {
-  margin: 12px 0 16px 0;
-  opacity: 0.12;
+  margin: 14px 0 18px 0;
+  opacity: 0.15;
 }
 
 .iris-subject-title {
   font-family: "SF Pro Display", "SF Pro", "Inter Display", sans-serif;
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 700;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.45px;
   color: @theme_text;
   line-height: 1.25;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 /* Attachment Cards */

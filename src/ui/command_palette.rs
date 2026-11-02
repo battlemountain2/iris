@@ -25,6 +25,12 @@ struct PaletteAction {
 
 const ACTIONS: &[PaletteAction] = &[
     PaletteAction {
+        title: "Add Email Account...",
+        category: "Accounts",
+        shortcut: Some("A"),
+        id: "add_account",
+    },
+    PaletteAction {
         title: "Compose New Message",
         category: "Mail",
         shortcut: Some("c"),

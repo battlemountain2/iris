@@ -111,33 +111,37 @@ impl ThreadListView {
         tabs_box.set_margin_bottom(6);
         tabs_box.set_homogeneous(true);
 
-        let tab_all_btn = gtk::ToggleButton::builder()
-            .label("All")
-            .active(true)
-            .build();
-        tab_all_btn.add_css_class("flat");
-        tab_all_btn.add_css_class("iris-tab-btn");
+        fn make_filter_tab(label_text: &str, icon_name: &str) -> gtk::ToggleButton {
+            let btn = gtk::ToggleButton::new();
+            let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+            hbox.set_halign(gtk::Align::Center);
 
-        let tab_personal_btn = gtk::ToggleButton::builder()
-            .label("Personal")
-            .group(&tab_all_btn)
-            .build();
-        tab_personal_btn.add_css_class("flat");
-        tab_personal_btn.add_css_class("iris-tab-btn");
+            let icon = gtk::Image::from_icon_name(icon_name);
+            icon.set_icon_size(gtk::IconSize::Normal);
+            icon.add_css_class("iris-tab-icon");
+            hbox.append(&icon);
 
-        let tab_newsletters_btn = gtk::ToggleButton::builder()
-            .label("Newsletters")
-            .group(&tab_all_btn)
-            .build();
-        tab_newsletters_btn.add_css_class("flat");
-        tab_newsletters_btn.add_css_class("iris-tab-btn");
+            let label = gtk::Label::new(Some(label_text));
+            label.add_css_class("iris-tab-label");
+            hbox.append(&label);
 
-        let tab_unread_btn = gtk::ToggleButton::builder()
-            .label("Unread")
-            .group(&tab_all_btn)
-            .build();
-        tab_unread_btn.add_css_class("flat");
-        tab_unread_btn.add_css_class("iris-tab-btn");
+            btn.set_child(Some(&hbox));
+            btn.add_css_class("flat");
+            btn.add_css_class("iris-tab-btn");
+            btn
+        }
+
+        let tab_all_btn = make_filter_tab("All", "mail-read-symbolic");
+        tab_all_btn.set_active(true);
+
+        let tab_personal_btn = make_filter_tab("Personal", "avatar-default-symbolic");
+        tab_personal_btn.set_group(Some(&tab_all_btn));
+
+        let tab_newsletters_btn = make_filter_tab("Newsletters", crate::ui::icons::feed_icon());
+        tab_newsletters_btn.set_group(Some(&tab_all_btn));
+
+        let tab_unread_btn = make_filter_tab("Unread", "mail-unread-symbolic");
+        tab_unread_btn.set_group(Some(&tab_all_btn));
 
         tabs_box.append(&tab_all_btn);
         tabs_box.append(&tab_personal_btn);
@@ -689,7 +693,7 @@ fn create_thread_card(
     card_hbox.append(&avatar);
 
     // 3. Content VBox
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
     vbox.set_hexpand(true);
 
     // Line 1: [Sender Name (hexpand)] [Attachment/Star icons] Right-aligned Date

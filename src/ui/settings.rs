@@ -19,6 +19,7 @@ impl SettingsDialog {
         theme_manager: Rc<ThemeManager>,
         on_trigger_sync: Rc<dyn Fn()>,
         on_config_updated: Option<Rc<dyn Fn(IrisConfig)>>,
+        on_add_account: Option<Rc<dyn Fn()>>,
     ) -> Self {
         let live_config = Rc::new(RefCell::new(config.clone()));
         let dialog = adw::Dialog::builder()
@@ -54,10 +55,27 @@ impl SettingsDialog {
             .description("Configured email accounts from ~/.config/iris/config.toml")
             .build();
 
+        let add_row = adw::ActionRow::builder()
+            .title("Add Email Account...")
+            .subtitle("Connect a new Gmail, iCloud, Fastmail, Outlook, or IMAP account")
+            .activatable(true)
+            .build();
+        add_row.add_prefix(&gtk::Image::from_icon_name("list-add-symbolic"));
+        let add_chevron = gtk::Image::from_icon_name("go-next-symbolic");
+        add_chevron.add_css_class("dim-label");
+        add_row.add_suffix(&add_chevron);
+        if let Some(ref on_add) = on_add_account {
+            let on_add_c = on_add.clone();
+            add_row.connect_activated(move |_| {
+                on_add_c();
+            });
+        }
+        accts_group.add(&add_row);
+
         if config.accounts.is_empty() {
             let empty_row = adw::ActionRow::builder()
-                .title("Demo Accounts Active")
-                .subtitle("Add real accounts to ~/.config/iris/config.toml to sync personal mail")
+                .title("No Custom Accounts")
+                .subtitle("Click above to add your Gmail, iCloud, or work email account")
                 .build();
             empty_row.add_prefix(&gtk::Image::from_icon_name("dialog-information-symbolic"));
             accts_group.add(&empty_row);
@@ -76,7 +94,8 @@ impl SettingsDialog {
                     .expanded(false)
                     .build();
 
-                exp_row.add_prefix(&gtk::Image::from_icon_name("mail-inbox-symbolic"));
+                let icon_name = crate::ui::icons::account_icon(&acct.display_name, &acct.email);
+                exp_row.add_prefix(&gtk::Image::from_icon_name(icon_name));
 
                 let badge = gtk::Label::new(Some("Active"));
                 badge.add_css_class("iris-key-badge");
@@ -108,6 +127,42 @@ impl SettingsDialog {
                 });
 
                 exp_row.add_row(&sig_entry);
+
+                let remove_btn = gtk::Button::builder()
+                    .label("Remove Account")
+                    .icon_name("user-trash-symbolic")
+                    .valign(gtk::Align::Center)
+                    .build();
+                remove_btn.add_css_class("destructive-action");
+                remove_btn.add_css_class("flat");
+
+                let cfg_clone_del = live_config.clone();
+                let on_update_del = on_config_updated.clone();
+                let acct_id_del = acct.id.clone();
+                let exp_row_del = exp_row.clone();
+                let accts_group_del = accts_group.clone();
+
+                remove_btn.connect_clicked(move |_| {
+                    let mut cfg = cfg_clone_del.borrow_mut();
+                    cfg.accounts.retain(|a| a.id != acct_id_del);
+                    if let Err(e) = crate::services::config::save_config(&cfg) {
+                        tracing::error!("Failed to save config after removing account: {e}");
+                    } else {
+                        tracing::info!("Removed account '{acct_id_del}'");
+                    }
+                    accts_group_del.remove(&exp_row_del);
+                    if let Some(ref cb) = on_update_del {
+                        cb(cfg.clone());
+                    }
+                });
+
+                let remove_row = adw::ActionRow::builder()
+                    .title("Remove from Iris")
+                    .subtitle("Disconnects this account and removes it from config.toml")
+                    .build();
+                remove_row.add_suffix(&remove_btn);
+                exp_row.add_row(&remove_row);
+
                 accts_group.add(&exp_row);
             }
         }
@@ -120,6 +175,7 @@ impl SettingsDialog {
             .build();
 
         let themes = [
+            ("iris-dark", "iOS Dark (Default)", "Apple iOS Mail dark palette with pure charcoal canvas & sapphire blue", "weather-clear-night-symbolic"),
             ("attic-olive", "Attic Olive Glass", "Default liquid glass with golden olive accent", "emblem-favorite-symbolic"),
             ("spartan-crimson", "Spartan Crimson", "Deep lacquer crimson with gold contrast", "weather-clear-night-symbolic"),
             ("byzantine-bronze", "Byzantine Bronze", "Imperial bronze and purple glass", "software-properties-symbolic"),

@@ -77,7 +77,7 @@ fn build_ui(app: &adw::Application) {
     let theme_manager = ui::ThemeManager::new();
 
     // Load or seed user accounts from ~/.config/iris/config.toml
-    let iris_config = Rc::new(services::config::load_or_create_config());
+    let iris_config = Rc::new(RefCell::new(services::config::load_or_create_config()));
 
     // Initialize Maildir Scanner & Seed Demo Emails if directory is empty
     let mail_root = get_mail_root();
@@ -93,12 +93,14 @@ fn build_ui(app: &adw::Application) {
     }
 
     let initial_acct_dir = iris_config
+        .borrow()
         .accounts
         .first()
         .and_then(|a| a.maildir_path.as_ref().map(PathBuf::from))
         .unwrap_or_else(|| mail_root.join("demo"));
     let initial_inbox = initial_acct_dir.join("INBOX");
     let initial_title = iris_config
+        .borrow()
         .accounts
         .first()
         .map(|a| a.display_name.clone())
@@ -120,7 +122,7 @@ fn build_ui(app: &adw::Application) {
     outer_split.set_min_sidebar_width(190.0);
     outer_split.set_max_sidebar_width(260.0);
 
-    let sidebar_view = Rc::new(ui::SidebarView::with_accounts(&iris_config.accounts));
+    let sidebar_view = Rc::new(ui::SidebarView::with_accounts(&iris_config.borrow().accounts));
     let sidebar_page = adw::NavigationPage::builder()
         .title("Mailboxes")
         .tag("sidebar")
@@ -247,7 +249,27 @@ fn build_ui(app: &adw::Application) {
             let prev_index = thread_view.list_box.selected_row().map(|r| r.index() as usize).unwrap_or(0);
             let prev_id = state.selected_thread.borrow().as_ref().map(|t| t.id.clone());
 
-            let threads = scanner.scan_folder(&folder);
+            let threads = if title == "All Inboxes" {
+                let mut all_threads = Vec::new();
+                let accounts = &iris_config.borrow().accounts;
+                if accounts.is_empty() {
+                    all_threads = scanner.scan_folder(&folder);
+                } else {
+                    for acct in accounts {
+                        let acct_dir = acct
+                            .maildir_path
+                            .as_ref()
+                            .map(PathBuf::from)
+                            .unwrap_or_else(|| state.mail_root.join(&acct.id));
+                        let mut acct_threads = scanner.scan_folder(&acct_dir.join("INBOX"));
+                        all_threads.append(&mut acct_threads);
+                    }
+                    all_threads.sort_by(|a, b| b.latest_timestamp.cmp(&a.latest_timestamp));
+                }
+                all_threads
+            } else {
+                scanner.scan_folder(&folder)
+            };
             thread_view.set_threads(&threads);
 
             // Update contact autocompletion in compose dialog from scanned threads
@@ -280,7 +302,7 @@ fn build_ui(app: &adw::Application) {
 
             // Live Mailbox Counter updates across configured accounts
             let mut total_unread = 0;
-            for (idx, acct) in iris_config.accounts.iter().enumerate() {
+            for (idx, acct) in iris_config.borrow().accounts.iter().enumerate() {
                 let acct_dir = acct
                     .maildir_path
                     .as_ref()
@@ -328,6 +350,7 @@ fn build_ui(app: &adw::Application) {
 
             if id == "inbox" {
                 let initial_dir = cfg
+                    .borrow()
                     .accounts
                     .first()
                     .and_then(|a| a.maildir_path.as_ref().map(PathBuf::from))
@@ -335,7 +358,8 @@ fn build_ui(app: &adw::Application) {
                 *state.current_folder.borrow_mut() = initial_dir.join("INBOX");
                 *state.current_title.borrow_mut() = "All Inboxes".to_string();
             } else if let Some(acct_id) = id.strip_prefix("account:") {
-                if let Some(acct) = cfg.accounts.iter().find(|a| a.id == acct_id) {
+                let cfg_borrow = cfg.borrow();
+                if let Some(acct) = cfg_borrow.accounts.iter().find(|a| a.id == acct_id) {
                     let acct_dir = acct
                         .maildir_path
                         .as_ref()
@@ -398,7 +422,7 @@ fn build_ui(app: &adw::Application) {
     let cfg_dispatch = iris_config.clone();
     let app_for_send = app.clone();
 
-    let compose_dialog = Rc::new(ui::ComposeDialog::with_accounts(&iris_config.accounts, move |payload| {
+    let compose_dialog = Rc::new(ui::ComposeDialog::with_accounts(&iris_config.borrow().accounts, move |payload| {
         if payload.to.is_empty() {
             let toast = adw::Toast::builder()
                 .title("Cannot send: Recipient address is empty")
@@ -511,6 +535,7 @@ fn build_ui(app: &adw::Application) {
             );
 
             let matching_smtp = cfg_dispatch
+                .borrow()
                 .accounts
                 .iter()
                 .find(|a| a.id == outbox_msg.account_name)
@@ -691,15 +716,86 @@ fn build_ui(app: &adw::Application) {
         });
     }
 
+    // Account Management Dialog & Preferences
+    let account_dialog = Rc::new(ui::AccountDialog::new());
+    let do_add_account = {
+        let account_dialog = account_dialog.clone();
+        let win = window.clone();
+        Rc::new(move || {
+            account_dialog.present(&win);
+        })
+    };
+
+    {
+        let iris_config = iris_config.clone();
+        let sidebar_view = sidebar_view.clone();
+        let compose_dialog = compose_dialog.clone();
+        let refresh_view = refresh_view.clone();
+        let toast_overlay = toast_overlay.clone();
+        let mail_root = mail_root.clone();
+
+        account_dialog.set_on_account_added(move |new_acct| {
+            let name = new_acct.display_name.clone();
+            let email = new_acct.email.clone();
+            let acct_dir = new_acct
+                .maildir_path
+                .as_ref()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| mail_root.join(&new_acct.id));
+
+            let _ = services::maildir::ensure_maildir_folder(&acct_dir.join("INBOX"));
+            let _ = services::maildir::ensure_maildir_folder(&acct_dir.join("Sent"));
+            let _ = services::maildir::ensure_maildir_folder(&acct_dir.join("Archive"));
+            let _ = services::maildir::ensure_maildir_folder(&acct_dir.join("Trash"));
+            let _ = services::maildir::ensure_maildir_folder(&acct_dir.join("Drafts"));
+
+            let mut cfg = iris_config.borrow_mut();
+            cfg.accounts.push(new_acct);
+            if let Err(err) = services::config::save_config(&cfg) {
+                tracing::error!("Failed to save account config: {err}");
+            }
+
+            let custom_folders = services::maildir::discover_custom_folders_for_account(&mail_root.join("demo"));
+            sidebar_view.update_accounts(&cfg.accounts, &custom_folders);
+            compose_dialog.set_accounts(&cfg.accounts);
+
+            let toast = adw::Toast::builder()
+                .title(format!("Added account: {name} ({email})"))
+                .timeout(3)
+                .build();
+            toast_overlay.add_toast(toast);
+
+            drop(cfg);
+            refresh_view();
+        });
+    }
+
+    {
+        let do_add_acct = do_add_account.clone();
+        sidebar_view.add_account_btn.connect_clicked(move |_| {
+            do_add_acct();
+        });
+    }
+
     // Preferences & Settings Dialog (Ctrl+,)
     let compose_for_settings = compose_dialog.clone();
+    let sidebar_for_settings = sidebar_view.clone();
+    let iris_config_for_settings = iris_config.clone();
+    let mail_root_for_settings = mail_root.clone();
+    let refresh_for_settings = refresh_view.clone();
+
     let settings_dialog = Rc::new(ui::SettingsDialog::new(
-        &iris_config,
+        &iris_config.borrow(),
         theme_manager.clone(),
         trigger_sync.clone(),
         Some(Rc::new(move |new_cfg| {
+            *iris_config_for_settings.borrow_mut() = new_cfg.clone();
             compose_for_settings.set_accounts(&new_cfg.accounts);
+            let custom_folders = services::maildir::discover_custom_folders_for_account(&mail_root_for_settings.join("demo"));
+            sidebar_for_settings.update_accounts(&new_cfg.accounts, &custom_folders);
+            refresh_for_settings();
         })),
+        Some(do_add_account.clone()),
     ));
     let do_settings = {
         let settings_dialog = settings_dialog.clone();
@@ -1571,12 +1667,14 @@ fn build_ui(app: &adw::Application) {
         let trigger_sync_palette = trigger_sync.clone();
         let do_shortcuts_palette = do_shortcuts.clone();
         let do_settings_palette = do_settings.clone();
+        let do_add_account_palette = do_add_account.clone();
         let thread_view_palette = thread_view.clone();
 
         Rc::new(ui::CommandPalette::with_action_handler(
             theme_manager.clone(),
             move |action| match action {
                 "compose" => compose_dialog.present(&win),
+                "add_account" => do_add_account_palette(),
                 "nav_inbox" => sidebar_view.select_folder("inbox"),
                 "nav_sent" => sidebar_view.select_folder("folder:sent"),
                 "nav_archive" => sidebar_view.select_folder("folder:archive"),
@@ -1663,6 +1761,7 @@ fn build_ui(app: &adw::Application) {
         on_select_all: do_select_all,
         on_move_to_folder: do_open_move_dialog.clone(),
         on_tag: do_tag.clone(),
+        on_add_account: Some(do_add_account.clone()),
     };
 
     ui::setup_window_keybindings(
@@ -1689,7 +1788,7 @@ fn build_ui(app: &adw::Application) {
     }
 
     // Automatic Background Sync Daemon (based on config.sync.interval_seconds)
-    let sync_interval_secs = iris_config.sync.interval_seconds;
+    let sync_interval_secs = iris_config.borrow().sync.interval_seconds;
     if sync_interval_secs > 0 {
         let mail_root_auto = mail_root.clone();
         let is_syncing_auto = is_syncing.clone();
@@ -1699,12 +1798,13 @@ fn build_ui(app: &adw::Application) {
 
         let count_unreads = move |sc: &services::maildir::MaildirScanner| -> u32 {
             let mut total = 0;
-            if cfg_auto.accounts.is_empty() {
+            let cfg = cfg_auto.borrow();
+            if cfg.accounts.is_empty() {
                 total += sc.count_unread_in_folder(&mail_root_auto.join("demo/INBOX"));
                 total += sc.count_unread_in_folder(&mail_root_auto.join("work/INBOX"));
                 total += sc.count_unread_in_folder(&mail_root_auto.join("icloud/INBOX"));
             } else {
-                for acct in &cfg_auto.accounts {
+                for acct in &cfg.accounts {
                     let acct_dir = acct
                         .maildir_path
                         .as_ref()

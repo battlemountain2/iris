@@ -30,6 +30,7 @@ pub struct KeybindingActions {
     pub on_select_all: Rc<dyn Fn()>,
     pub on_move_to_folder: Rc<dyn Fn()>,
     pub on_tag: Rc<dyn Fn()>,
+    pub on_add_account: Option<Rc<dyn Fn()>>,
 }
 
 pub fn setup_window_keybindings(
@@ -144,6 +145,15 @@ pub fn setup_window_keybindings(
         }
 
         match key {
+            // 'A' (Shift+A) -> Add Email Account
+            Key::A => {
+                if let Some(ref on_add) = actions_clone.on_add_account {
+                    on_add();
+                    glib::Propagation::Stop
+                } else {
+                    glib::Propagation::Proceed
+                }
+            }
             // 'x' -> Toggle selection of current thread for batch actions
             Key::x => {
                 (actions_clone.on_toggle_select)();
@@ -297,6 +307,7 @@ mod tests {
             on_select_all: Rc::new(move || inv7.store(true, Ordering::SeqCst)),
             on_move_to_folder: Rc::new(move || inv8.store(true, Ordering::SeqCst)),
             on_tag: Rc::new(move || inv9.store(true, Ordering::SeqCst)),
+            on_add_account: None,
         };
 
         (actions.on_archive)();
