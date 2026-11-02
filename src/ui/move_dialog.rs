@@ -16,22 +16,31 @@ impl MoveToFolderDialog {
     pub fn new() -> Rc<Self> {
         let dialog = adw::Dialog::builder()
             .title("Move Conversation")
-            .content_width(380)
-            .content_height(420)
+            .content_width(420)
+            .content_height(460)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-move-dialog");
 
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        vbox.set_margin_start(16);
-        vbox.set_margin_end(16);
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        vbox.set_margin_start(18);
+        vbox.set_margin_end(18);
         vbox.set_margin_top(16);
-        vbox.set_margin_bottom(16);
+        vbox.set_margin_bottom(18);
+
+        let title_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let folder_icon = gtk::Image::from_icon_name(crate::ui::icons::folder_icon());
+        folder_icon.set_icon_size(gtk::IconSize::Large);
+        folder_icon.add_css_class("accent");
+        title_hbox.append(&folder_icon);
 
         let title_label = gtk::Label::builder()
             .label("Move to Folder")
             .xalign(0.0)
             .build();
         title_label.add_css_class("title-3");
-        vbox.append(&title_label);
+        title_hbox.append(&title_label);
+        vbox.append(&title_hbox);
 
         let search_entry = gtk::SearchEntry::builder()
             .placeholder_text("Filter or create folder... (Enter to move)")
@@ -175,16 +184,16 @@ fn create_folder_row(folder_name: &str, is_create: bool) -> gtk::ListBoxRow {
     hbox.set_margin_bottom(8);
 
     let icon_name = match folder_name.to_lowercase().as_str() {
-        "inbox" => "mail-folder-inbox-symbolic",
+        "inbox" => crate::ui::icons::inbox_icon(),
         "archive" => crate::ui::icons::archive_icon(),
-        "trash" => "user-trash-symbolic",
+        "trash" => crate::ui::icons::trash_icon(),
         "sent" => crate::ui::icons::sent_icon(),
-        "drafts" => "document-edit-symbolic",
+        "drafts" => crate::ui::icons::drafts_icon(),
         _ => {
             if is_create {
                 "list-add-symbolic"
             } else {
-                "folder-symbolic"
+                crate::ui::icons::folder_icon()
             }
         }
     };

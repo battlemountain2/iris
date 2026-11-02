@@ -66,6 +66,8 @@ impl ReadingPaneView {
         // Triage Segmented Pill [ Archive | Move | Trash ]
         let triage_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         triage_box.add_css_class("linked");
+        triage_box.set_margin_start(4);
+        triage_box.set_margin_end(4);
         triage_box.append(&archive_btn);
         triage_box.append(&move_btn);
         triage_box.append(&trash_btn);
@@ -88,6 +90,8 @@ impl ReadingPaneView {
         // Respond Segmented Pill [ Reply | Reply All | Forward ]
         let respond_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         respond_box.add_css_class("linked");
+        respond_box.set_margin_start(4);
+        respond_box.set_margin_end(4);
         respond_box.append(&reply_btn);
         respond_box.append(&reply_all_btn);
         respond_box.append(&forward_btn);
@@ -101,7 +105,7 @@ impl ReadingPaneView {
         edit_draft_btn.set_visible(false);
 
         let tag_btn = gtk::Button::builder()
-            .icon_name("tag-symbolic")
+            .icon_name(crate::ui::icons::tag_icon())
             .tooltip_text("Labels & Tags (l)")
             .build();
 
@@ -113,6 +117,8 @@ impl ReadingPaneView {
         // Organize Segmented Pill [ Star | Tag ]
         let organize_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         organize_box.add_css_class("linked");
+        organize_box.set_margin_start(4);
+        organize_box.set_margin_end(4);
         organize_box.append(&star_btn);
         organize_box.append(&tag_btn);
 

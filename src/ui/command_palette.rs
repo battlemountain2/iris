@@ -21,6 +21,7 @@ struct PaletteAction {
     category: &'static str,
     shortcut: Option<&'static str>,
     id: &'static str,
+    icon: &'static str,
 }
 
 const ACTIONS: &[PaletteAction] = &[
@@ -29,198 +30,238 @@ const ACTIONS: &[PaletteAction] = &[
         category: "Accounts",
         shortcut: Some("A"),
         id: "add_account",
+        icon: "list-add-symbolic",
     },
     PaletteAction {
         title: "Compose New Message",
         category: "Mail",
         shortcut: Some("c"),
         id: "compose",
+        icon: "mail-message-new-symbolic",
     },
     PaletteAction {
         title: "Sync Mailboxes (mbsync)",
         category: "Mail",
         shortcut: Some("Ctrl+R"),
         id: "sync",
+        icon: "view-refresh-symbolic",
     },
     PaletteAction {
         title: "Go to Inbox",
         category: "Navigation",
         shortcut: Some("g i"),
         id: "nav_inbox",
+        icon: "mail-send-receive-symbolic",
     },
     PaletteAction {
         title: "Go to Feed & Newsletters",
         category: "Navigation",
         shortcut: None,
         id: "nav_feed",
+        icon: "application-rss+xml-symbolic",
     },
     PaletteAction {
         title: "Go to Sent",
         category: "Navigation",
         shortcut: Some("g s"),
         id: "nav_sent",
+        icon: "mail-send-symbolic",
     },
     PaletteAction {
         title: "Go to Archive",
         category: "Navigation",
         shortcut: Some("g a"),
         id: "nav_archive",
+        icon: "package-x-generic-symbolic",
     },
     PaletteAction {
         title: "Go to Drafts",
         category: "Navigation",
         shortcut: Some("g d"),
         id: "nav_drafts",
+        icon: "document-edit-symbolic",
     },
     PaletteAction {
         title: "Go to Trash",
         category: "Navigation",
         shortcut: Some("g t"),
         id: "nav_trash",
+        icon: "user-trash-symbolic",
     },
     PaletteAction {
         title: "Keyboard Shortcuts Cheatsheet",
         category: "Help",
         shortcut: Some("?"),
         id: "shortcuts",
+        icon: "help-about-symbolic",
     },
     PaletteAction {
         title: "Preferences & Accounts",
         category: "Settings",
         shortcut: Some("Ctrl+,"),
         id: "settings",
+        icon: "emblem-system-symbolic",
     },
     PaletteAction {
         title: "Reply to Sender",
         category: "Message",
         shortcut: Some("r"),
         id: "reply",
+        icon: "mail-reply-sender-symbolic",
     },
     PaletteAction {
         title: "Reply All",
         category: "Message",
         shortcut: Some("a"),
         id: "reply_all",
+        icon: "mail-reply-all-symbolic",
     },
     PaletteAction {
         title: "Forward Message",
         category: "Message",
         shortcut: Some("f"),
         id: "forward",
+        icon: "mail-forward-symbolic",
     },
     PaletteAction {
         title: "Select All Visible Conversations",
         category: "Message",
         shortcut: Some("Ctrl+A"),
         id: "select_all",
+        icon: "object-select-symbolic",
     },
     PaletteAction {
         title: "Clear Multi-Selection",
         category: "Message",
         shortcut: Some("Esc"),
         id: "clear_selection",
+        icon: "window-close-symbolic",
     },
     PaletteAction {
         title: "Archive Selected Message",
         category: "Message",
         shortcut: Some("e"),
         id: "archive",
+        icon: "package-x-generic-symbolic",
     },
     PaletteAction {
         title: "Delete Selected Message",
         category: "Message",
         shortcut: Some("#"),
         id: "trash",
+        icon: "user-trash-symbolic",
     },
     PaletteAction {
         title: "Move Conversation to Folder...",
         category: "Message",
         shortcut: Some("v"),
         id: "move_folder",
+        icon: "folder-symbolic",
     },
     PaletteAction {
         title: "Add / Edit Labels & Tags...",
         category: "Message",
         shortcut: Some("l"),
         id: "tag",
+        icon: "user-bookmarks-symbolic",
     },
     PaletteAction {
         title: "Create New Maildir Folder...",
         category: "Mailbox",
         shortcut: None,
         id: "create_folder",
+        icon: "folder-new-symbolic",
     },
     PaletteAction {
         title: "Empty Trash",
         category: "Mailbox",
         shortcut: None,
         id: "empty_trash",
+        icon: "user-trash-symbolic",
     },
     PaletteAction {
         title: "Toggle Star / Flag",
         category: "Message",
         shortcut: Some("s"),
         id: "star",
+        icon: "starred-symbolic",
+    },
+    PaletteAction {
+        title: "Theme: iOS Dark (Apple Default)",
+        category: "Appearance",
+        shortcut: None,
+        id: "theme_iris_dark",
+        icon: "weather-clear-night-symbolic",
     },
     PaletteAction {
         title: "Theme: Attic Olive (Greek)",
         category: "Appearance",
         shortcut: None,
         id: "theme_attic_olive",
+        icon: "emblem-favorite-symbolic",
     },
     PaletteAction {
         title: "Theme: Spartan Crimson (Greek)",
         category: "Appearance",
         shortcut: None,
         id: "theme_spartan_crimson",
+        icon: "weather-clear-night-symbolic",
     },
     PaletteAction {
         title: "Theme: Byzantine Bronze (Greek)",
         category: "Appearance",
         shortcut: None,
         id: "theme_byzantine_bronze",
+        icon: "software-properties-symbolic",
     },
     PaletteAction {
         title: "Theme: Attic Amber (Greek)",
         category: "Appearance",
         shortcut: None,
         id: "theme_attic_amber",
+        icon: "weather-clear-symbolic",
     },
     PaletteAction {
         title: "Theme: Corinthian Bronze (Greek)",
         category: "Appearance",
         shortcut: None,
         id: "theme_corinthian_bronze",
+        icon: "weather-overcast-symbolic",
     },
     PaletteAction {
         title: "Theme: Catppuccin Mocha",
         category: "Appearance",
         shortcut: None,
         id: "theme_catppuccin",
+        icon: "applications-graphics-symbolic",
     },
     PaletteAction {
         title: "Theme: Everforest",
         category: "Appearance",
         shortcut: None,
         id: "theme_everforest",
+        icon: "starred-symbolic",
     },
     PaletteAction {
         title: "Theme: Tokyo Night",
         category: "Appearance",
         shortcut: None,
         id: "theme_tokyo_night",
+        icon: "night-light-symbolic",
     },
     PaletteAction {
         title: "Theme: Follow Noctalia Palette",
         category: "Appearance",
         shortcut: None,
         id: "theme_noctalia",
+        icon: "applications-graphics-symbolic",
     },
     PaletteAction {
         title: "Toggle Subtle Accent Mode",
         category: "Appearance",
         shortcut: None,
         id: "toggle_subtle",
+        icon: "weather-few-clouds-symbolic",
     },
 ];
 
@@ -235,9 +276,11 @@ impl CommandPalette {
     {
         let dialog = adw::Dialog::builder()
             .title("Command Palette")
-            .content_width(560)
-            .content_height(420)
+            .content_width(580)
+            .content_height(440)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-palette-dialog");
 
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
         vbox.set_margin_start(16);
@@ -324,12 +367,10 @@ fn populate_actions(
         hbox.set_margin_top(8);
         hbox.set_margin_bottom(8);
 
-        let cat_label = gtk::Label::builder()
-            .label(action.category)
-            .build();
-        cat_label.add_css_class("caption");
-        cat_label.add_css_class("dim-label");
-        hbox.append(&cat_label);
+        let icon = gtk::Image::from_icon_name(action.icon);
+        icon.set_icon_size(gtk::IconSize::Normal);
+        icon.add_css_class("iris-palette-icon");
+        hbox.append(&icon);
 
         let title_label = gtk::Label::builder()
             .label(action.title)
@@ -339,10 +380,16 @@ fn populate_actions(
         title_label.add_css_class("body");
         hbox.append(&title_label);
 
+        let cat_label = gtk::Label::builder()
+            .label(action.category)
+            .build();
+        cat_label.add_css_class("caption");
+        cat_label.add_css_class("iris-palette-category");
+        hbox.append(&cat_label);
+
         if let Some(shortcut) = action.shortcut {
             let sc_label = gtk::Label::builder().label(shortcut).build();
-            sc_label.add_css_class("caption");
-            sc_label.add_css_class("dim-label");
+            sc_label.add_css_class("iris-key-badge");
             hbox.append(&sc_label);
         }
 
@@ -367,6 +414,7 @@ fn execute_action(
     on_action: &Rc<dyn Fn(&str)>,
 ) {
     match id {
+        "theme_iris_dark" => theme_manager.set_theme("iris-dark"),
         "theme_attic_olive" => theme_manager.set_theme("attic-olive"),
         "theme_spartan_crimson" => theme_manager.set_theme("spartan-crimson"),
         "theme_byzantine_bronze" => theme_manager.set_theme("byzantine-bronze"),

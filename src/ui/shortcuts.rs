@@ -22,6 +22,8 @@ impl ShortcutsDialog {
             .content_width(620)
             .content_height(580)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-shortcuts-dialog");
 
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
         vbox.add_css_class("iris-shortcuts-dialog");
@@ -54,7 +56,7 @@ impl ShortcutsDialog {
         content.append(&hint_label);
 
         // Section 1: Navigation
-        content.append(&build_section("Navigation", &[
+        content.append(&build_section("Navigation", "folder-symbolic", &[
             ("Next conversation / message", ShortcutKeys::Or(&["j", "↓"])),
             ("Previous conversation / message", ShortcutKeys::Or(&["k", "↑"])),
             ("Go to All Inboxes", ShortcutKeys::Chord(&["g", "i"])),
@@ -68,7 +70,7 @@ impl ShortcutsDialog {
         ]));
 
         // Section 2: Triage
-        content.append(&build_section("Triage & Organization", &[
+        content.append(&build_section("Triage & Organization", crate::ui::icons::archive_icon(), &[
             ("Select / multi-select conversation", ShortcutKeys::Single("x")),
             ("Select all conversations", ShortcutKeys::Single("Ctrl+A")),
             ("Move to folder...", ShortcutKeys::Single("v")),
@@ -81,7 +83,7 @@ impl ShortcutsDialog {
         ]));
 
         // Section 3: Compose & Reading
-        content.append(&build_section("Compose & Reading", &[
+        content.append(&build_section("Compose & Reading", "mail-message-new-symbolic", &[
             ("New conversation / Compose", ShortcutKeys::Single("c")),
             ("Reply to sender", ShortcutKeys::Single("r")),
             ("Reply all recipients", ShortcutKeys::Single("a")),
@@ -92,10 +94,11 @@ impl ShortcutsDialog {
         ]));
 
         // Section 4: Global & Search
-        content.append(&build_section("Global & Search", &[
+        content.append(&build_section("Global & Search", "system-search-symbolic", &[
             ("Search messages & full text", ShortcutKeys::Single("/")),
             ("Filter bodies / attachments", ShortcutKeys::Or(&["body:", "attach:"])),
             ("Command Palette", ShortcutKeys::Or(&["Ctrl+K", "Space"])),
+            ("Add Email Account...", ShortcutKeys::Single("A")),
             ("Preferences & Accounts", ShortcutKeys::Single("Ctrl+,")),
             ("Synchronize mailboxes (mbsync)", ShortcutKeys::Single("Ctrl+R")),
             ("Open Keyboard Shortcuts cheatsheet", ShortcutKeys::Single("?")),
@@ -114,15 +117,22 @@ impl ShortcutsDialog {
     }
 }
 
-fn build_section(title: &str, items: &[(&str, ShortcutKeys)]) -> gtk::Box {
+fn build_section(title: &str, icon_name: &str, items: &[(&str, ShortcutKeys)]) -> gtk::Box {
     let section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+
+    let heading_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    let icon = gtk::Image::from_icon_name(icon_name);
+    icon.set_icon_size(gtk::IconSize::Normal);
+    icon.add_css_class("accent");
+    heading_box.append(&icon);
 
     let heading = gtk::Label::builder()
         .label(title)
         .xalign(0.0)
         .build();
     heading.add_css_class("iris-shortcuts-heading");
-    section.append(&heading);
+    heading_box.append(&heading);
+    section.append(&heading_box);
 
     let group = gtk::Box::new(gtk::Orientation::Vertical, 0);
     group.add_css_class("iris-shortcuts-group");

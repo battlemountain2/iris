@@ -14,22 +14,30 @@ pub fn prompt_create_folder<F>(
 {
     let dialog = adw::Dialog::builder()
         .title("New Maildir Folder")
-        .content_width(340)
-        .content_height(190)
+        .content_width(380)
+        .content_height(200)
         .build();
+    dialog.add_css_class("iris-dialog");
 
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    vbox.set_margin_start(18);
+    vbox.set_margin_end(18);
     vbox.set_margin_top(16);
-    vbox.set_margin_bottom(16);
+    vbox.set_margin_bottom(18);
+
+    let title_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let title_icon = gtk::Image::from_icon_name(crate::ui::icons::folder_new_icon());
+    title_icon.set_icon_size(gtk::IconSize::Large);
+    title_icon.add_css_class("accent");
+    title_hbox.append(&title_icon);
 
     let title_label = gtk::Label::builder()
         .label("Create New Folder")
         .xalign(0.0)
         .build();
     title_label.add_css_class("title-3");
-    vbox.append(&title_label);
+    title_hbox.append(&title_label);
+    vbox.append(&title_hbox);
 
     let error_label = gtk::Label::builder()
         .xalign(0.0)
@@ -43,17 +51,27 @@ pub fn prompt_create_folder<F>(
         .placeholder_text("Folder name (e.g. Work, Projects)")
         .hexpand(true)
         .build();
+    entry.set_icon_from_icon_name(
+        gtk::EntryIconPosition::Primary,
+        Some(crate::ui::icons::folder_icon()),
+    );
     vbox.append(&entry);
 
     let btn_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     btn_box.set_halign(gtk::Align::End);
     btn_box.set_margin_top(8);
 
-    let cancel_btn = gtk::Button::builder().label("Cancel").build();
+    let cancel_btn = gtk::Button::builder()
+        .label("Cancel")
+        .icon_name("window-close-symbolic")
+        .build();
     cancel_btn.add_css_class("flat");
     btn_box.append(&cancel_btn);
 
-    let create_btn = gtk::Button::builder().label("Create").build();
+    let create_btn = gtk::Button::builder()
+        .label("Create Folder")
+        .icon_name("list-add-symbolic")
+        .build();
     create_btn.add_css_class("suggested-action");
     btn_box.append(&create_btn);
 
@@ -133,22 +151,30 @@ pub fn prompt_rename_folder<F>(
 {
     let dialog = adw::Dialog::builder()
         .title("Rename Folder")
-        .content_width(340)
-        .content_height(190)
+        .content_width(380)
+        .content_height(200)
         .build();
+    dialog.add_css_class("iris-dialog");
 
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    vbox.set_margin_start(18);
+    vbox.set_margin_end(18);
     vbox.set_margin_top(16);
-    vbox.set_margin_bottom(16);
+    vbox.set_margin_bottom(18);
+
+    let title_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let title_icon = gtk::Image::from_icon_name("document-edit-symbolic");
+    title_icon.set_icon_size(gtk::IconSize::Large);
+    title_icon.add_css_class("accent");
+    title_hbox.append(&title_icon);
 
     let title_label = gtk::Label::builder()
         .label(&format!("Rename \"{current_name}\""))
         .xalign(0.0)
         .build();
     title_label.add_css_class("title-3");
-    vbox.append(&title_label);
+    title_hbox.append(&title_label);
+    vbox.append(&title_hbox);
 
     let error_label = gtk::Label::builder()
         .xalign(0.0)
@@ -162,17 +188,27 @@ pub fn prompt_rename_folder<F>(
         .text(current_name)
         .hexpand(true)
         .build();
+    entry.set_icon_from_icon_name(
+        gtk::EntryIconPosition::Primary,
+        Some("document-edit-symbolic"),
+    );
     vbox.append(&entry);
 
     let btn_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     btn_box.set_halign(gtk::Align::End);
     btn_box.set_margin_top(8);
 
-    let cancel_btn = gtk::Button::builder().label("Cancel").build();
+    let cancel_btn = gtk::Button::builder()
+        .label("Cancel")
+        .icon_name("window-close-symbolic")
+        .build();
     cancel_btn.add_css_class("flat");
     btn_box.append(&cancel_btn);
 
-    let rename_btn = gtk::Button::builder().label("Rename").build();
+    let rename_btn = gtk::Button::builder()
+        .label("Rename Folder")
+        .icon_name("document-edit-symbolic")
+        .build();
     rename_btn.add_css_class("suggested-action");
     btn_box.append(&rename_btn);
 

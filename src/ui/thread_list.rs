@@ -94,7 +94,7 @@ impl ThreadListView {
         search_box.append(&search_entry);
 
         let palette_btn = gtk::Button::builder()
-            .icon_name("system-search-symbolic")
+            .icon_name(crate::ui::icons::search_icon())
             .tooltip_text("Command Palette (Ctrl+K)")
             .build();
         palette_btn.add_css_class("flat");

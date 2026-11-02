@@ -17,22 +17,31 @@ impl TagDialog {
     pub fn new() -> Rc<Self> {
         let dialog = adw::Dialog::builder()
             .title("Labels & Tags")
-            .content_width(360)
-            .content_height(420)
+            .content_width(400)
+            .content_height(460)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-tag-dialog");
 
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        vbox.set_margin_start(16);
-        vbox.set_margin_end(16);
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        vbox.set_margin_start(18);
+        vbox.set_margin_end(18);
         vbox.set_margin_top(16);
-        vbox.set_margin_bottom(16);
+        vbox.set_margin_bottom(18);
+
+        let title_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let tag_icon = gtk::Image::from_icon_name(crate::ui::icons::tag_icon());
+        tag_icon.set_icon_size(gtk::IconSize::Large);
+        tag_icon.add_css_class("accent");
+        title_hbox.append(&tag_icon);
 
         let title_label = gtk::Label::builder()
             .label("Thread Labels & Tags")
             .xalign(0.0)
             .build();
         title_label.add_css_class("title-3");
-        vbox.append(&title_label);
+        title_hbox.append(&title_label);
+        vbox.append(&title_hbox);
 
         let search_entry = gtk::SearchEntry::builder()
             .placeholder_text("Filter or create tag... (Enter to toggle)")
@@ -211,7 +220,7 @@ fn create_tag_row(tag: &str, is_active: bool, is_create: bool) -> gtk::ListBoxRo
     let icon_name = if is_create {
         "list-add-symbolic"
     } else {
-        "tag-symbolic"
+        crate::ui::icons::tag_icon()
     };
     let icon = gtk::Image::from_icon_name(icon_name);
     icon.set_icon_size(gtk::IconSize::Normal);

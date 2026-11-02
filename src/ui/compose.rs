@@ -106,9 +106,11 @@ impl ComposeDialog {
 
         let dialog = adw::Dialog::builder()
             .title("New Message")
-            .content_width(700)
-            .content_height(560)
+            .content_width(720)
+            .content_height(580)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-compose-dialog");
 
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
         vbox.add_css_class("iris-compose");
@@ -124,9 +126,11 @@ impl ComposeDialog {
 
         let discard_btn = gtk::Button::builder()
             .label("Discard")
+            .icon_name("user-trash-symbolic")
             .tooltip_text("Discard draft")
             .build();
         discard_btn.add_css_class("flat");
+        discard_btn.add_css_class("destructive-action");
         let dialog_discard = dialog.clone();
         let draft_path_discard = draft_file_path.clone();
         let timer_discard = debounce_timer.clone();
@@ -142,7 +146,10 @@ impl ComposeDialog {
         });
         header.pack_start(&discard_btn);
 
-        let cancel_btn = gtk::Button::builder().label("Cancel").build();
+        let cancel_btn = gtk::Button::builder()
+            .label("Cancel")
+            .icon_name("window-close-symbolic")
+            .build();
         cancel_btn.add_css_class("flat");
         let dialog_cancel = dialog.clone();
         let timer_cancel = debounce_timer.clone();
@@ -170,6 +177,7 @@ impl ComposeDialog {
 
         let send_btn = gtk::Button::builder()
             .label("Send")
+            .icon_name("mail-send-symbolic")
             .tooltip_text("Send message (10-second Undo window)")
             .build();
         send_btn.add_css_class("suggested-action");
@@ -178,20 +186,24 @@ impl ComposeDialog {
         vbox.append(&header);
 
         // Compact Address Header (From, To, Subject)
-        let fields_vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        let fields_vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
         fields_vbox.add_css_class("iris-compose-fields");
         fields_vbox.set_margin_start(16);
         fields_vbox.set_margin_end(16);
-        fields_vbox.set_margin_top(8);
-        fields_vbox.set_margin_bottom(8);
+        fields_vbox.set_margin_top(10);
+        fields_vbox.set_margin_bottom(10);
 
         // From line
         let from_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         from_hbox.add_css_class("iris-compose-row");
+        let from_icon = gtk::Image::from_icon_name(crate::ui::icons::user_icon());
+        from_icon.add_css_class("dim-label");
+        from_hbox.append(&from_icon);
+
         let from_lbl = gtk::Label::builder()
             .label("From:")
             .xalign(0.0)
-            .width_chars(7)
+            .width_chars(6)
             .build();
         from_lbl.add_css_class("caption");
         from_lbl.add_css_class("dim-label");
@@ -213,10 +225,14 @@ impl ComposeDialog {
         // To line
         let to_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         to_hbox.add_css_class("iris-compose-row");
+        let to_icon = gtk::Image::from_icon_name("mail-read-symbolic");
+        to_icon.add_css_class("dim-label");
+        to_hbox.append(&to_icon);
+
         let to_lbl = gtk::Label::builder()
             .label("To:")
             .xalign(0.0)
-            .width_chars(7)
+            .width_chars(6)
             .build();
         to_lbl.add_css_class("caption");
         to_lbl.add_css_class("dim-label");
@@ -249,10 +265,14 @@ impl ComposeDialog {
         // Subject line
         let subject_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         subject_hbox.add_css_class("iris-compose-row");
+        let subject_icon = gtk::Image::from_icon_name("document-edit-symbolic");
+        subject_icon.add_css_class("dim-label");
+        subject_hbox.append(&subject_icon);
+
         let subject_lbl = gtk::Label::builder()
             .label("Subject:")
             .xalign(0.0)
-            .width_chars(7)
+            .width_chars(6)
             .build();
         subject_lbl.add_css_class("caption");
         subject_lbl.add_css_class("dim-label");

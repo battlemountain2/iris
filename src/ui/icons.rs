@@ -33,8 +33,8 @@ pub fn account_icon(name: &str, email: &str) -> &'static str {
     let lower = format!("{} {}", name.to_lowercase(), email.to_lowercase());
     if lower.contains("icloud") || lower.contains("apple") || lower.contains("me.com") || lower.contains("mac.com") {
         resolve_icon(&[
-            "weather-few-clouds-symbolic",
             "folder-remote-symbolic",
+            "weather-few-clouds-symbolic",
             "mail-read-symbolic",
         ])
     } else if lower.contains("gmail") || lower.contains("google") {
@@ -74,8 +74,9 @@ pub fn archive_icon() -> &'static str {
 pub fn feed_icon() -> &'static str {
     resolve_icon(&[
         "newspaper-symbolic",
-        "application-rss+xml-symbolic",
         "user-bookmarks-symbolic",
+        "chat-message-new-symbolic",
+        "application-rss+xml-symbolic",
     ])
 }
 
@@ -116,6 +117,55 @@ pub fn folder_icon() -> &'static str {
     resolve_icon(&[
         "folder-symbolic",
         "inode-directory-symbolic",
+    ])
+}
+
+/// Returns the best available symbolic icon name for creating a new folder.
+pub fn folder_new_icon() -> &'static str {
+    resolve_icon(&[
+        "folder-new-symbolic",
+        "folder-symbolic",
+    ])
+}
+
+/// Returns the best available symbolic icon name for labels and tags.
+pub fn tag_icon() -> &'static str {
+    resolve_icon(&[
+        "tag-symbolic",
+        "user-bookmarks-symbolic",
+        "bookmark-new-symbolic",
+    ])
+}
+
+/// Returns the best available symbolic icon name for password entries.
+pub fn password_icon() -> &'static str {
+    resolve_icon(&[
+        "dialog-password-symbolic",
+        "changes-prevent-symbolic",
+    ])
+}
+
+/// Returns the best available symbolic icon name for servers and network hosts.
+pub fn server_icon() -> &'static str {
+    resolve_icon(&[
+        "network-server-symbolic",
+        "preferences-system-network-symbolic",
+    ])
+}
+
+/// Returns the best available symbolic icon name for users and contacts.
+pub fn user_icon() -> &'static str {
+    resolve_icon(&[
+        "avatar-default-symbolic",
+        "user-info-symbolic",
+    ])
+}
+
+/// Returns the best available symbolic icon name for search bars and actions.
+pub fn search_icon() -> &'static str {
+    resolve_icon(&[
+        "system-search-symbolic",
+        "edit-find-symbolic",
     ])
 }
 
@@ -182,5 +232,15 @@ mod tests {
     fn test_folder_icon_not_empty() {
         let icon = folder_icon();
         assert!(!icon.is_empty());
+    }
+
+    #[test]
+    fn test_new_icons_not_empty() {
+        assert!(!folder_new_icon().is_empty());
+        assert!(!tag_icon().is_empty());
+        assert!(!password_icon().is_empty());
+        assert!(!server_icon().is_empty());
+        assert!(!user_icon().is_empty());
+        assert!(!search_icon().is_empty());
     }
 }

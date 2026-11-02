@@ -27,6 +27,8 @@ impl SettingsDialog {
             .content_width(640)
             .content_height(580)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-settings-dialog");
 
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
         vbox.add_css_class("iris-settings-dialog");
@@ -106,6 +108,7 @@ impl SettingsDialog {
                     .text(acct.signature.as_deref().unwrap_or(""))
                     .show_apply_button(true)
                     .build();
+                sig_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::drafts_icon()));
 
                 let cfg_clone = live_config.clone();
                 let on_update_c = on_config_updated.clone();
@@ -160,6 +163,7 @@ impl SettingsDialog {
                     .title("Remove from Iris")
                     .subtitle("Disconnects this account and removes it from config.toml")
                     .build();
+                remove_row.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::trash_icon()));
                 remove_row.add_suffix(&remove_btn);
                 exp_row.add_row(&remove_row);
 

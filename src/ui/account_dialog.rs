@@ -80,9 +80,11 @@ impl AccountDialog {
     pub fn new() -> Self {
         let dialog = adw::Dialog::builder()
             .title("Add Email Account")
-            .content_width(460)
-            .content_height(580)
+            .content_width(500)
+            .content_height(600)
             .build();
+        dialog.add_css_class("iris-dialog");
+        dialog.add_css_class("iris-account-dialog");
 
         let root_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
 
@@ -90,7 +92,10 @@ impl AccountDialog {
         header.set_show_end_title_buttons(false);
         header.set_show_start_title_buttons(false);
 
-        let cancel_btn = gtk::Button::builder().label("Cancel").build();
+        let cancel_btn = gtk::Button::builder()
+            .label("Cancel")
+            .icon_name("window-close-symbolic")
+            .build();
         cancel_btn.add_css_class("flat");
         let dlg_for_cancel = dialog.clone();
         cancel_btn.connect_clicked(move |_| {
@@ -98,7 +103,10 @@ impl AccountDialog {
         });
         header.pack_start(&cancel_btn);
 
-        let add_btn = gtk::Button::builder().label("Add Account").build();
+        let add_btn = gtk::Button::builder()
+            .label("Add Account")
+            .icon_name("list-add-symbolic")
+            .build();
         add_btn.add_css_class("suggested-action");
         header.pack_end(&add_btn);
 
@@ -109,11 +117,11 @@ impl AccountDialog {
             .vexpand(true)
             .build();
 
-        let content_box = gtk::Box::new(gtk::Orientation::Vertical, 12);
-        content_box.set_margin_start(16);
-        content_box.set_margin_end(16);
-        content_box.set_margin_top(12);
-        content_box.set_margin_bottom(20);
+        let content_box = gtk::Box::new(gtk::Orientation::Vertical, 14);
+        content_box.set_margin_start(20);
+        content_box.set_margin_end(20);
+        content_box.set_margin_top(14);
+        content_box.set_margin_bottom(24);
 
         // Error message banner
         let error_banner = gtk::Label::builder()
@@ -133,16 +141,26 @@ impl AccountDialog {
         let preset_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         preset_box.set_homogeneous(true);
 
-        let btn_gmail = gtk::Button::with_label("Gmail");
-        btn_gmail.add_css_class("flat");
-        let btn_icloud = gtk::Button::with_label("iCloud");
-        btn_icloud.add_css_class("flat");
-        let btn_fastmail = gtk::Button::with_label("Fastmail");
-        btn_fastmail.add_css_class("flat");
-        let btn_outlook = gtk::Button::with_label("Outlook");
-        btn_outlook.add_css_class("flat");
-        let btn_custom = gtk::Button::with_label("Custom");
-        btn_custom.add_css_class("flat");
+        fn make_provider_chip(label: &str, icon_name: &str) -> gtk::Button {
+            let btn = gtk::Button::new();
+            let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            hbox.set_halign(gtk::Align::Center);
+            let icon = gtk::Image::from_icon_name(icon_name);
+            icon.set_icon_size(gtk::IconSize::Normal);
+            let lbl = gtk::Label::new(Some(label));
+            hbox.append(&icon);
+            hbox.append(&lbl);
+            btn.set_child(Some(&hbox));
+            btn.add_css_class("flat");
+            btn.add_css_class("iris-provider-chip");
+            btn
+        }
+
+        let btn_gmail = make_provider_chip("Gmail", crate::ui::icons::account_icon("Gmail", "bry@gmail.com"));
+        let btn_icloud = make_provider_chip("iCloud", crate::ui::icons::account_icon("iCloud", "bry@icloud.com"));
+        let btn_fastmail = make_provider_chip("Fastmail", crate::ui::icons::account_icon("Fastmail", "bry@fastmail.com"));
+        let btn_outlook = make_provider_chip("Outlook", crate::ui::icons::account_icon("Outlook", "bry@outlook.com"));
+        let btn_custom = make_provider_chip("Custom", crate::ui::icons::server_icon());
 
         preset_box.append(&btn_gmail);
         preset_box.append(&btn_icloud);
@@ -160,16 +178,19 @@ impl AccountDialog {
         let name_entry = adw::EntryRow::builder()
             .title("Account Name")
             .build();
+        name_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::user_icon()));
         creds_group.add(&name_entry);
 
         let email_entry = adw::EntryRow::builder()
             .title("Email Address")
             .build();
+        email_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::account_icon("Account", "user@mail.com")));
         creds_group.add(&email_entry);
 
         let maildir_entry = adw::EntryRow::builder()
             .title("Local Maildir Path")
             .build();
+        maildir_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::folder_icon()));
         creds_group.add(&maildir_entry);
 
         content_box.append(&creds_group);
@@ -183,28 +204,33 @@ impl AccountDialog {
         let smtp_host_entry = adw::EntryRow::builder()
             .title("SMTP Server Host")
             .build();
+        smtp_host_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::server_icon()));
         server_group.add(&smtp_host_entry);
 
         let smtp_port_entry = adw::EntryRow::builder()
             .title("SMTP Port")
             .text("587")
             .build();
+        smtp_port_entry.add_prefix(&gtk::Image::from_icon_name("preferences-system-network-symbolic"));
         server_group.add(&smtp_port_entry);
 
         let smtp_user_entry = adw::EntryRow::builder()
             .title("SMTP Username")
             .build();
+        smtp_user_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::user_icon()));
         server_group.add(&smtp_user_entry);
 
         let smtp_pass_entry = adw::PasswordEntryRow::builder()
             .title("Password / App Password")
             .build();
+        smtp_pass_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::password_icon()));
         server_group.add(&smtp_pass_entry);
 
         let sig_entry = adw::EntryRow::builder()
             .title("Email Signature")
             .text("Sent with Iris — Liquid Glass Mail")
             .build();
+        sig_entry.add_prefix(&gtk::Image::from_icon_name(crate::ui::icons::drafts_icon()));
         server_group.add(&sig_entry);
 
         content_box.append(&server_group);
