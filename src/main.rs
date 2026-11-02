@@ -117,8 +117,8 @@ fn build_ui(app: &adw::Application) {
 
     // Outer split view (Sidebar -> Content)
     let outer_split = adw::NavigationSplitView::new();
-    outer_split.set_min_sidebar_width(180.0);
-    outer_split.set_max_sidebar_width(240.0);
+    outer_split.set_min_sidebar_width(190.0);
+    outer_split.set_max_sidebar_width(260.0);
 
     let sidebar_view = Rc::new(ui::SidebarView::with_accounts(&iris_config.accounts));
     let sidebar_page = adw::NavigationPage::builder()
@@ -130,8 +130,8 @@ fn build_ui(app: &adw::Application) {
 
     // Inner split view (Thread List -> Reading Pane)
     let inner_split = adw::NavigationSplitView::new();
-    inner_split.set_min_sidebar_width(260.0);
-    inner_split.set_max_sidebar_width(340.0);
+    inner_split.set_min_sidebar_width(320.0);
+    inner_split.set_max_sidebar_width(460.0);
 
     let thread_view = Rc::new(ui::ThreadListView::new());
     thread_view.setup_tab_handlers();

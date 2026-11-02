@@ -39,6 +39,7 @@ impl ReadingPaneView {
 
         // Action Headerbar (Back, Archive, Trash, Forward, Reply All, Reply, Star)
         let header = adw::HeaderBar::new();
+        header.set_show_title(false);
 
         let back_btn = gtk::Button::builder()
             .icon_name("go-previous-symbolic")
@@ -51,43 +52,45 @@ impl ReadingPaneView {
             .icon_name(crate::ui::icons::archive_icon())
             .tooltip_text("Archive (e)")
             .build();
-        archive_btn.add_css_class("flat");
-        header.pack_end(&archive_btn);
-
-        let trash_btn = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
-            .tooltip_text("Delete (#)")
-            .build();
-        trash_btn.add_css_class("flat");
-        header.pack_end(&trash_btn);
 
         let move_btn = gtk::Button::builder()
             .icon_name("folder-symbolic")
             .tooltip_text("Move to Folder... (v)")
             .build();
-        move_btn.add_css_class("flat");
-        header.pack_end(&move_btn);
+
+        let trash_btn = gtk::Button::builder()
+            .icon_name("user-trash-symbolic")
+            .tooltip_text("Delete (#)")
+            .build();
+
+        // Triage Segmented Pill [ Archive | Move | Trash ]
+        let triage_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        triage_box.add_css_class("linked");
+        triage_box.append(&archive_btn);
+        triage_box.append(&move_btn);
+        triage_box.append(&trash_btn);
 
         let forward_btn = gtk::Button::builder()
             .icon_name("mail-forward-symbolic")
             .tooltip_text("Forward (f)")
             .build();
-        forward_btn.add_css_class("flat");
-        header.pack_end(&forward_btn);
 
         let reply_all_btn = gtk::Button::builder()
             .icon_name("mail-reply-all-symbolic")
             .tooltip_text("Reply All (a)")
             .build();
-        reply_all_btn.add_css_class("flat");
-        header.pack_end(&reply_all_btn);
 
         let reply_btn = gtk::Button::builder()
             .icon_name("mail-reply-sender-symbolic")
             .tooltip_text("Reply (r)")
             .build();
-        reply_btn.add_css_class("flat");
-        header.pack_end(&reply_btn);
+
+        // Respond Segmented Pill [ Reply | Reply All | Forward ]
+        let respond_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        respond_box.add_css_class("linked");
+        respond_box.append(&reply_btn);
+        respond_box.append(&reply_all_btn);
+        respond_box.append(&forward_btn);
 
         let edit_draft_btn = gtk::Button::builder()
             .icon_name("document-edit-symbolic")
@@ -96,21 +99,27 @@ impl ReadingPaneView {
             .build();
         edit_draft_btn.add_css_class("suggested-action");
         edit_draft_btn.set_visible(false);
-        header.pack_end(&edit_draft_btn);
 
         let tag_btn = gtk::Button::builder()
             .icon_name("tag-symbolic")
             .tooltip_text("Labels & Tags (l)")
             .build();
-        tag_btn.add_css_class("flat");
-        header.pack_end(&tag_btn);
 
         let star_btn = gtk::Button::builder()
             .icon_name("non-starred-symbolic")
             .tooltip_text("Star / Flag (s)")
             .build();
-        star_btn.add_css_class("flat");
-        header.pack_end(&star_btn);
+
+        // Organize Segmented Pill [ Star | Tag ]
+        let organize_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        organize_box.add_css_class("linked");
+        organize_box.append(&star_btn);
+        organize_box.append(&tag_btn);
+
+        header.pack_end(&organize_box);
+        header.pack_end(&respond_box);
+        header.pack_end(&triage_box);
+        header.pack_end(&edit_draft_btn);
 
         container.append(&header);
 
@@ -137,7 +146,7 @@ impl ReadingPaneView {
             .xalign(0.0)
             .wrap(true)
             .build();
-        subject_label.add_css_class("title-1");
+        subject_label.add_css_class("iris-subject-title");
         content_box.append(&subject_label);
 
         // Thread Tags Strip
@@ -158,8 +167,8 @@ impl ReadingPaneView {
         content_box.append(&messages_container);
 
         let clamp = adw::Clamp::builder()
-            .maximum_size(820)
-            .tightening_threshold(620)
+            .maximum_size(900)
+            .tightening_threshold(700)
             .child(&content_box)
             .build();
 
@@ -457,6 +466,12 @@ fn build_conversation_card(
     };
 
     card.append(&header_box);
+
+    if is_latest {
+        let divider = gtk::Separator::new(gtk::Orientation::Horizontal);
+        divider.add_css_class("iris-card-divider");
+        card.append(&divider);
+    }
 
     // Body & Attachments Container
     let body_box = gtk::Box::new(gtk::Orientation::Vertical, 12);

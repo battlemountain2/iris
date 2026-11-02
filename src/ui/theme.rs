@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub mod noctalia;
 
 const BUILTIN_THEMES: [(&str, &str); 15] = [
-    ("iris-dark", include_str!("../../data/themes/attic-olive.toml")),
+    ("iris-dark", include_str!("../../data/themes/iris-dark.toml")),
     ("iris-light", include_str!("../../data/themes/iris-light.toml")),
     ("attic-olive", include_str!("../../data/themes/attic-olive.toml")),
     (
@@ -82,7 +82,7 @@ impl ThemeManager {
         }
 
         let manager = Rc::new(Self {
-            current_id: RefCell::new("attic-olive".to_string()),
+            current_id: RefCell::new("iris-dark".to_string()),
             subtle_mode: RefCell::new(true),
             follows_noctalia: RefCell::new(false),
             noctalia: RefCell::new(noctalia_palette),
@@ -110,8 +110,8 @@ impl ThemeManager {
             }
         }
 
-        // Fallback default (Attic Olive)
-        toml::from_str::<ThemeTokens>(BUILTIN_THEMES[0].1).expect("builtin attic-olive valid")
+        // Fallback default (Iris iOS Dark)
+        toml::from_str::<ThemeTokens>(BUILTIN_THEMES[0].1).expect("builtin iris-dark valid")
     }
 
     pub fn set_theme(&self, id: &str) {

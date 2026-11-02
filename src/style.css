@@ -273,24 +273,24 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   margin: 3px 8px;
   padding: 10px 12px;
   border-radius: 12px;
-  background-color: alpha(@theme_surface, 0.40);
-  border: 1px solid alpha(@theme_text, 0.05);
-  box-shadow: 0 1px 2px alpha(#000000, 0.04);
+  background-color: alpha(@theme_surface, 0.65);
+  border: 1px solid alpha(@theme_border, 0.45);
+  box-shadow: 0 1px 3px alpha(#000000, 0.08);
   transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-thread-card:hover,
 .iris-message-row:hover {
-  background-color: alpha(@theme_surface, 0.85);
-  border-color: alpha(@theme_accent, 0.22);
-  box-shadow: 0 2px 6px alpha(#000000, 0.08);
+  background-color: alpha(@theme_surface, 0.95);
+  border-color: alpha(@theme_accent, 0.35);
+  box-shadow: 0 2px 8px alpha(#000000, 0.14);
 }
 
 .iris-thread-card:selected,
 .iris-message-row:selected {
   background-color: alpha(@theme_accent, 0.18);
-  border: 1px solid alpha(@theme_accent, 0.45);
-  box-shadow: 0 2px 8px alpha(@theme_accent, 0.12);
+  border: 1px solid alpha(@theme_accent, 0.55);
+  box-shadow: 0 2px 10px alpha(@theme_accent, 0.18);
 }
 
 .iris-thread-card:focus-visible,
@@ -511,28 +511,44 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 /* Multi-Message Conversation Cards */
 .iris-conversation-card {
-  background-color: alpha(@theme_surface, 0.40);
-  border: 1px solid alpha(@theme_text, 0.08);
-  border-radius: 14px;
-  padding: 14px 18px;
+  background-color: alpha(@theme_surface, 0.65);
+  border: 1px solid alpha(@theme_border, 0.70);
+  border-radius: 16px;
+  padding: 22px 26px;
+  box-shadow: 0 4px 18px alpha(#000000, 0.14);
   transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-conversation-card.latest {
-  background-color: transparent;
-  border: none;
-  padding: 4px 0;
+  background-color: alpha(@theme_surface, 0.85);
+  border: 1px solid alpha(@theme_border, 0.90);
+  padding: 24px 28px;
 }
 
 .iris-conversation-card.collapsed {
-  padding: 10px 16px;
-  background-color: alpha(@theme_surface, 0.30);
-  border-color: alpha(@theme_text, 0.06);
+  padding: 12px 18px;
+  background-color: alpha(@theme_surface, 0.40);
+  border-color: alpha(@theme_border, 0.45);
 }
 
 .iris-conversation-card.collapsed:hover {
   background-color: alpha(@theme_surface, 0.65);
-  border-color: alpha(@theme_accent, 0.30);
+  border-color: alpha(@theme_accent, 0.40);
+}
+
+.iris-card-divider {
+  margin: 12px 0 16px 0;
+  opacity: 0.12;
+}
+
+.iris-subject-title {
+  font-family: "SF Pro Display", "SF Pro", "Inter Display", sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: @theme_text;
+  line-height: 1.25;
+  margin-bottom: 4px;
 }
 
 /* Attachment Cards */

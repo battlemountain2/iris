@@ -656,7 +656,8 @@ fn create_thread_card(
 
     // 1. Left indicator slot: Overlay with unread dot and selection checkmark
     let indicator_overlay = gtk::Overlay::new();
-    indicator_overlay.set_valign(gtk::Align::Center);
+    indicator_overlay.set_valign(gtk::Align::Start);
+    indicator_overlay.set_margin_top(8);
     indicator_overlay.set_halign(gtk::Align::Center);
     indicator_overlay.add_css_class("iris-indicator-box");
 
