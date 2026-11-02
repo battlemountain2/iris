@@ -1489,6 +1489,12 @@ fn build_ui(app: &adw::Application) {
         });
     }
     {
+        let do_move = do_open_move_dialog.clone();
+        reading_view.move_btn.connect_clicked(move |_| {
+            do_move();
+        });
+    }
+    {
         let do_reply = do_reply.clone();
         reading_view.reply_btn.connect_clicked(move |_| {
             do_reply();

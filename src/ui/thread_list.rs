@@ -325,6 +325,13 @@ impl ThreadListView {
         let sel = self.selected_thread_ids.borrow();
         let sel_count = sel.len();
         let visible = self.visible_threads.borrow();
+
+        if sel_count > 0 {
+            self.list_box.add_css_class("iris-multiselect-active");
+        } else {
+            self.list_box.remove_css_class("iris-multiselect-active");
+        }
+
         for (idx, thread) in visible.iter().enumerate() {
             if let Some(row) = self.list_box.row_at_index(idx as i32) {
                 if sel.contains(&thread.id) {
@@ -458,6 +465,12 @@ impl ThreadListView {
         let archive_cb = self.swipe_archive_cb.borrow().clone();
         let trash_cb = self.swipe_trash_cb.borrow().clone();
         let sel_ids = self.selected_thread_ids.borrow();
+
+        if !sel_ids.is_empty() {
+            self.list_box.add_css_class("iris-multiselect-active");
+        } else {
+            self.list_box.remove_css_class("iris-multiselect-active");
+        }
 
         for thread in &filtered {
             let sender = thread
@@ -610,14 +623,17 @@ fn create_thread_card(
 
     row.add_controller(gesture);
 
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    vbox.set_margin_start(12);
-    vbox.set_margin_end(12);
-    vbox.set_margin_top(8);
-    vbox.set_margin_bottom(8);
+    let card_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    card_hbox.set_margin_start(10);
+    card_hbox.set_margin_end(10);
+    card_hbox.set_margin_top(8);
+    card_hbox.set_margin_bottom(8);
 
-    // Line 1: [Unread Dot] Sender Name [Attachment/Star icons] Right-aligned Date
-    let line1 = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    // 1. Left indicator slot: Overlay with unread dot and selection checkmark
+    let indicator_overlay = gtk::Overlay::new();
+    indicator_overlay.set_valign(gtk::Align::Center);
+    indicator_overlay.set_halign(gtk::Align::Center);
+    indicator_overlay.add_css_class("iris-indicator-box");
 
     let dot = gtk::Label::new(None);
     if is_unread {
@@ -625,10 +641,36 @@ fn create_thread_card(
     } else {
         dot.add_css_class("iris-unread-placeholder");
     }
-    line1.append(&dot);
+    indicator_overlay.set_child(Some(&dot));
+
+    let select_icon = gtk::Image::from_icon_name("object-select-symbolic");
+    select_icon.set_icon_size(gtk::IconSize::Normal);
+    select_icon.add_css_class("iris-select-circle");
+    indicator_overlay.add_overlay(&select_icon);
+
+    card_hbox.append(&indicator_overlay);
+
+    // 2. iOS Contact Avatar Monogram Circle
+    let display_name = parse_display_name(sender);
+    let avatar = adw::Avatar::builder()
+        .size(32)
+        .text(&display_name)
+        .show_initials(true)
+        .valign(gtk::Align::Start)
+        .margin_top(2)
+        .build();
+    avatar.add_css_class("iris-row-avatar");
+    card_hbox.append(&avatar);
+
+    // 3. Content VBox
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    vbox.set_hexpand(true);
+
+    // Line 1: [Sender Name (hexpand)] [Attachment/Star icons] Right-aligned Date
+    let line1 = gtk::Box::new(gtk::Orientation::Horizontal, 6);
 
     let sender_label = gtk::Label::builder()
-        .label(sender)
+        .label(&display_name)
         .xalign(0.0)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .hexpand(true)
@@ -674,10 +716,12 @@ fn create_thread_card(
     }
     vbox.append(&line2);
 
-    // Line 3: Snippet (Dim muted text, single line preview)
+    // Line 3: Snippet (Dim muted text, 2-line preview like iOS Mail)
     let line3 = gtk::Label::builder()
         .label(snippet)
         .xalign(0.0)
+        .wrap(true)
+        .lines(2)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     line3.add_css_class("iris-row-snippet");
@@ -697,8 +741,21 @@ fn create_thread_card(
         vbox.append(&tag_box);
     }
 
-    row.set_child(Some(&vbox));
+    card_hbox.append(&vbox);
+    row.set_child(Some(&card_hbox));
     row
+}
+
+pub fn parse_display_name(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if let Some(pos) = trimmed.find('<') {
+        let name = trimmed[..pos].trim().trim_matches('"').trim();
+        if !name.is_empty() {
+            return name.to_string();
+        }
+    }
+    let cleaned = trimmed.trim_matches(|c| c == '<' || c == '>' || c == '"' || c == '\'');
+    cleaned.split('@').next().unwrap_or(cleaned).trim().to_string()
 }
 
 #[cfg(test)]
@@ -786,5 +843,14 @@ mod tests {
         };
         assert!(!is_newsletter_thread(&t2));
         assert!(is_personal_thread(&t2));
+    }
+
+    #[test]
+    fn test_parse_display_name() {
+        assert_eq!(parse_display_name("Alex Rivera <alex@hermes.dev>"), "Alex Rivera");
+        assert_eq!(parse_display_name("\"Apple Support\" <support@apple.com>"), "Apple Support");
+        assert_eq!(parse_display_name("<team@omarchy.org>"), "team");
+        assert_eq!(parse_display_name("bry@omarchy.org"), "bry");
+        assert_eq!(parse_display_name("Mom"), "Mom");
     }
 }

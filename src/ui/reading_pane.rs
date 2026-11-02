@@ -13,6 +13,7 @@ pub struct ReadingPaneView {
     pub back_btn: gtk::Button,
     pub archive_btn: gtk::Button,
     pub trash_btn: gtk::Button,
+    pub move_btn: gtk::Button,
     pub reply_btn: gtk::Button,
     pub reply_all_btn: gtk::Button,
     pub forward_btn: gtk::Button,
@@ -59,6 +60,13 @@ impl ReadingPaneView {
             .build();
         trash_btn.add_css_class("flat");
         header.pack_end(&trash_btn);
+
+        let move_btn = gtk::Button::builder()
+            .icon_name("folder-symbolic")
+            .tooltip_text("Move to Folder... (v)")
+            .build();
+        move_btn.add_css_class("flat");
+        header.pack_end(&move_btn);
 
         let forward_btn = gtk::Button::builder()
             .icon_name("mail-forward-symbolic")
@@ -167,6 +175,7 @@ impl ReadingPaneView {
             back_btn,
             archive_btn,
             trash_btn,
+            move_btn,
             reply_btn,
             reply_all_btn,
             forward_btn,
@@ -200,6 +209,7 @@ impl ReadingPaneView {
 
         self.star_btn.set_visible(true);
         self.tag_btn.set_visible(true);
+        self.move_btn.set_visible(true);
         self.archive_btn.set_visible(true);
         self.trash_btn.set_visible(true);
 
@@ -303,6 +313,7 @@ impl ReadingPaneView {
         self.subject_label.set_visible(false);
         self.star_btn.set_visible(false);
         self.tag_btn.set_visible(false);
+        self.move_btn.set_visible(false);
         self.archive_btn.set_visible(false);
         self.trash_btn.set_visible(false);
         self.star_btn.set_icon_name("non-starred-symbolic");

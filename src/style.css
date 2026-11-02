@@ -165,28 +165,30 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   box-shadow: 0 1px 3px alpha(#000000, 0.18);
 }
 
-/* Mimestream Typeset Message Rows */
+/* iOS Mail Inset Grouped Message Cards */
 .iris-thread-card,
 .iris-message-row {
-  margin: 1px 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background-color: transparent;
-  border: 1px solid transparent;
-  border-bottom: 1px solid alpha(@theme_text, 0.05);
-  transition: background-color 100ms ease, border-color 100ms ease;
+  margin: 3px 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background-color: alpha(@theme_surface, 0.40);
+  border: 1px solid alpha(@theme_text, 0.05);
+  box-shadow: 0 1px 2px alpha(#000000, 0.04);
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .iris-thread-card:hover,
 .iris-message-row:hover {
-  background-color: alpha(#ffffff, 0.05);
-  border-color: transparent;
+  background-color: alpha(@theme_surface, 0.85);
+  border-color: alpha(@theme_accent, 0.22);
+  box-shadow: 0 2px 6px alpha(#000000, 0.08);
 }
 
 .iris-thread-card:selected,
 .iris-message-row:selected {
-  background-color: alpha(@theme_accent, 0.20);
-  border: 1px solid alpha(@theme_accent, 0.50);
+  background-color: alpha(@theme_accent, 0.18);
+  border: 1px solid alpha(@theme_accent, 0.45);
+  box-shadow: 0 2px 8px alpha(@theme_accent, 0.12);
 }
 
 .iris-thread-card:focus-visible,
@@ -197,46 +199,79 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 /* Multi-Select Triage Active Rows */
 .iris-message-row.iris-row-multiselected {
-  background-color: alpha(@theme_accent, 0.22);
-  border-left: 3px solid @theme_accent;
+  background-color: alpha(@theme_accent, 0.24);
+  border: 1px solid alpha(@theme_accent, 0.55);
 }
 
 .iris-message-row.iris-row-multiselected:hover {
-  background-color: alpha(@theme_accent, 0.28);
+  background-color: alpha(@theme_accent, 0.30);
 }
 
-/* Swipe Gesture Feedback */
+/* iOS Swipe Gesture Feedback */
 .iris-message-row.swipe-archive {
-  background-color: alpha(#5e8052, 0.38) !important;
-  border: 1px solid alpha(#5e8052, 0.70) !important;
+  background-color: alpha(#007aff, 0.28) !important;
+  border: 1px solid alpha(#007aff, 0.70) !important;
   transition: background-color 80ms ease, border-color 80ms ease;
 }
 
 .iris-message-row.swipe-trash {
-  background-color: alpha(#b94a48, 0.38) !important;
-  border: 1px solid alpha(#b94a48, 0.70) !important;
+  background-color: alpha(#ff3b30, 0.28) !important;
+  border: 1px solid alpha(#ff3b30, 0.70) !important;
   transition: background-color 80ms ease, border-color 80ms ease;
 }
 
-/* Unread Indicator Dot (Mimestream small 7px dot) */
+/* iOS Style Indicator Box (18px slot for Unread Dot or Selection Check) */
+.iris-indicator-box {
+  min-width: 18px;
+  min-height: 18px;
+}
+
 .iris-unread-dot {
-  min-width: 7px;
-  min-height: 7px;
+  min-width: 8px;
+  min-height: 8px;
   border-radius: 50%;
-  background-color: @theme_accent;
-  box-shadow: 0 0 6px alpha(@theme_accent, 0.5);
+  background-color: #007aff;
+  box-shadow: 0 0 8px alpha(#007aff, 0.65);
+  transition: opacity 120ms ease;
 }
 
 .iris-unread-placeholder {
-  min-width: 7px;
-  min-height: 7px;
+  min-width: 8px;
+  min-height: 8px;
   background-color: transparent;
 }
 
-/* Typography Hierarchy */
+.iris-select-circle {
+  opacity: 0.0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+/* Multiselect Mode Active: morph unread dot into selection circle */
+.iris-multiselect-active .iris-unread-dot,
+.iris-multiselect-active .iris-unread-placeholder {
+  opacity: 0.0;
+}
+
+.iris-multiselect-active .iris-select-circle {
+  opacity: 0.40;
+  color: alpha(@theme_text, 0.50);
+}
+
+.iris-multiselect-active .iris-row-multiselected .iris-select-circle {
+  opacity: 1.0;
+  color: #007aff;
+}
+
+/* Contact Avatar Monogram Circle */
+.iris-row-avatar {
+  border-radius: 50%;
+  box-shadow: 0 1px 3px alpha(#000000, 0.12);
+}
+
+/* Typography Hierarchy (Apple SF Style) */
 .iris-row-sender {
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 13.5px;
+  font-weight: 500;
   color: @theme_text;
 }
 
@@ -247,8 +282,8 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 .iris-row-subject {
   font-size: 13px;
-  font-weight: 400;
-  color: alpha(@theme_text, 0.90);
+  font-weight: 500;
+  color: alpha(@theme_text, 0.92);
 }
 
 .iris-row-subject.unread-bold {
@@ -258,18 +293,18 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 .iris-row-snippet {
   font-size: 12px;
-  color: @theme_dim_text;
+  color: alpha(@theme_dim_text, 0.88);
   line-height: 1.35;
 }
 
 .iris-row-date {
-  font-size: 11px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   color: @theme_dim_text;
 }
 
 .iris-row-date.unread-accent {
-  color: @theme_accent;
+  color: #007aff;
   font-weight: 600;
 }
 

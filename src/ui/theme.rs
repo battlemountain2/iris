@@ -181,6 +181,10 @@ impl ThemeManager {
                  border-color: alpha(@theme_accent, 0.55);\n\
              }}\n\
              \n\
+             .iris-multiselect-active .iris-row-multiselected .iris-select-circle {{\n\
+                 color: @theme_accent;\n\
+             }}\n\
+             \n\
              .iris-sidebar row:selected {{\n\
                  background-color: alpha(@theme_accent, 0.28);\n\
                  border-color: alpha(@theme_accent, 0.60);\n\
