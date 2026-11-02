@@ -1,6 +1,86 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Iris Liquid-Glass & Mimestream-Hierarchy Theme Stylesheet */
 
+/* ========================================================================= */
+/* 0. GLOBAL BASELINE, TYPOGRAPHY & FLOATING CAPSULE SCROLLBARS              */
+/* ========================================================================= */
+window.iris-window,
+dialog,
+popover {
+  font-family: "SF Pro Text", "SF Pro", "Inter", -apple-system, system-ui, sans-serif;
+  -gtk-font-smoothing: antialiased;
+}
+
+headerbar .title,
+.iris-heading,
+.iris-title {
+  font-family: "SF Pro Display", "SF Pro", "Inter Display", sans-serif;
+  letter-spacing: -0.2px;
+}
+
+/* Monospace & Tabular Numeric Elements */
+.iris-key-badge,
+.numeric,
+.iris-row-date {
+  font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+}
+
+/* Floating Capsule Scrollbars */
+scrollbar {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+scrollbar trough {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+}
+
+scrollbar slider {
+  background-color: alpha(@theme_text, 0.20);
+  border-radius: 8px;
+  min-width: 6px;
+  min-height: 24px;
+  border: 2px solid transparent;
+  transition: background-color 140ms cubic-bezier(0.16, 1, 0.3, 1), min-width 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+scrollbar slider:hover {
+  background-color: alpha(@theme_text, 0.45);
+  min-width: 8px;
+}
+
+scrollbar slider:active {
+  background-color: @theme_accent;
+}
+
+/* Headerbar Tactile Micro-Interactions (Hermes Emphasized Curve) */
+headerbar button image,
+headerbar menubutton > button image {
+  opacity: 0.68;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+headerbar button:hover image,
+headerbar button:active image,
+headerbar button:checked image,
+headerbar menubutton > button:hover image,
+headerbar menubutton > button:active image {
+  opacity: 1.0;
+}
+
+/* Focus Rings */
+button:focus-visible,
+entry:focus-visible,
+row:focus-visible {
+  outline: 2px solid @theme_accent;
+  outline-offset: -1px;
+}
+
 /* Root Window, Containers, and Internal Split Panes: Transparent for Wayland Compositor Blur */
 window.iris-window,
 window.iris-window.background,
@@ -50,7 +130,7 @@ navigation-split-view > navigation-page > .view,
   border-radius: 8px;
   margin: 2px 8px;
   padding: 3px 6px;
-  transition: background-color 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid transparent;
 }
 
@@ -67,6 +147,28 @@ navigation-split-view > navigation-page > .view,
 .iris-sidebar row:focus-visible {
   outline: 2px solid alpha(@theme_accent, 0.70);
   outline-offset: -1px;
+}
+
+/* Sidebar Section Headers */
+.iris-sidebar-section-header {
+  font-family: "SF Pro Text", "SF Pro", "Inter", sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.85px;
+  text-transform: uppercase;
+  color: alpha(@theme_dim_text, 0.70);
+  padding: 6px 0 2px 0;
+}
+
+/* Sidebar Icons */
+.iris-sidebar-icon {
+  opacity: 0.75;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-sidebar row:hover .iris-sidebar-icon,
+.iris-sidebar row:selected .iris-sidebar-icon {
+  opacity: 1.0;
 }
 
 /* Sidebar Count Badges */
@@ -151,7 +253,7 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   padding: 4px 6px;
   min-height: 24px;
   color: @theme_dim_text;
-  transition: all 120ms ease-out;
+  transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-tab-btn:hover {
@@ -174,7 +276,7 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   background-color: alpha(@theme_surface, 0.40);
   border: 1px solid alpha(@theme_text, 0.05);
   box-shadow: 0 1px 2px alpha(#000000, 0.04);
-  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-thread-card:hover,
@@ -211,13 +313,13 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 .iris-message-row.swipe-archive {
   background-color: alpha(#007aff, 0.28) !important;
   border: 1px solid alpha(#007aff, 0.70) !important;
-  transition: background-color 80ms ease, border-color 80ms ease;
+  transition: background-color 80ms cubic-bezier(0.16, 1, 0.3, 1), border-color 80ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-message-row.swipe-trash {
   background-color: alpha(#ff3b30, 0.28) !important;
   border: 1px solid alpha(#ff3b30, 0.70) !important;
-  transition: background-color 80ms ease, border-color 80ms ease;
+  transition: background-color 80ms cubic-bezier(0.16, 1, 0.3, 1), border-color 80ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* iOS Style Indicator Box (18px slot for Unread Dot or Selection Check) */
@@ -232,7 +334,7 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   border-radius: 50%;
   background-color: #007aff;
   box-shadow: 0 0 8px alpha(#007aff, 0.65);
-  transition: opacity 120ms ease;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-unread-placeholder {
@@ -243,7 +345,7 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 .iris-select-circle {
   opacity: 0.0;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1), color 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Multiselect Mode Active: morph unread dot into selection circle */
@@ -334,6 +436,21 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   background-color: alpha(@theme_accent, 0.26);
 }
 
+/* iOS Mail Bottom Status Bar */
+.iris-status-bar {
+  background-color: transparent;
+  padding: 4px 0 6px 0;
+  border-top: 1px solid alpha(@theme_text, 0.04);
+}
+
+.iris-status-label {
+  font-family: "SF Pro Text", "SF Pro", "Inter", sans-serif;
+  font-size: 11px;
+  color: alpha(@theme_dim_text, 0.75);
+  font-weight: 500;
+  letter-spacing: -0.1px;
+}
+
 /* ========================================================================= */
 /* 3. READING PANE (Spacious, Quiet, Comfortable Reading Canvas)             */
 /* ========================================================================= */
@@ -396,9 +513,9 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 .iris-conversation-card {
   background-color: alpha(@theme_surface, 0.40);
   border: 1px solid alpha(@theme_text, 0.08);
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 14px 18px;
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-conversation-card.latest {
@@ -424,7 +541,7 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
   border: 1px solid alpha(@theme_text, 0.10);
   border-radius: 8px;
   padding: 10px 14px;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .iris-attachment-card:hover {

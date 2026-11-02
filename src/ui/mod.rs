@@ -3,6 +3,7 @@
 pub mod command_palette;
 pub mod compose;
 pub mod folder_dialog;
+pub mod icons;
 pub mod keybindings;
 pub mod move_dialog;
 pub mod reading_pane;

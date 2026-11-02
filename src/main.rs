@@ -629,12 +629,14 @@ fn build_ui(app: &adw::Application) {
         let refresh_view = refresh_view.clone();
         let app_sync = app.clone();
         let is_syncing = is_syncing.clone();
+        let thread_view_sync = thread_view.clone();
 
         Rc::new(move || {
             if is_syncing.get() {
                 return;
             }
             is_syncing.set(true);
+            thread_view_sync.set_status("Checking for Mail...");
 
             let spinner = gtk::Spinner::builder().spinning(true).build();
             sync_btn.set_child(Some(&spinner));

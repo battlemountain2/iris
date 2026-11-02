@@ -48,7 +48,7 @@ impl ReadingPaneView {
         header.pack_start(&back_btn);
 
         let archive_btn = gtk::Button::builder()
-            .icon_name("mail-archive-symbolic")
+            .icon_name(crate::ui::icons::archive_icon())
             .tooltip_text("Archive (e)")
             .build();
         archive_btn.add_css_class("flat");

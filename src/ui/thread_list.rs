@@ -30,6 +30,7 @@ pub struct ThreadListView {
     pub tab_personal_btn: gtk::ToggleButton,
     pub tab_newsletters_btn: gtk::ToggleButton,
     pub tab_unread_btn: gtk::ToggleButton,
+    pub status_label: gtk::Label,
     pub all_threads: RefCell<Vec<Thread>>,
     pub visible_threads: RefCell<Vec<Thread>>,
     pub selected_thread_ids: Rc<RefCell<std::collections::HashSet<String>>>,
@@ -159,6 +160,22 @@ impl ThreadListView {
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
 
+        // iOS Mail Bottom Status Bar
+        let status_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        status_box.add_css_class("iris-status-bar");
+        status_box.set_margin_start(12);
+        status_box.set_margin_end(12);
+        status_box.set_margin_top(4);
+        status_box.set_margin_bottom(6);
+        status_box.set_halign(gtk::Align::Center);
+
+        let status_label = gtk::Label::builder()
+            .label("Updated Just Now")
+            .build();
+        status_label.add_css_class("iris-status-label");
+        status_box.append(&status_label);
+        container.append(&status_box);
+
         // Escape inside search clears query and returns focus to list
         let list_box_focus = list_box.clone();
         search_entry.connect_stop_search(move |entry| {
@@ -187,6 +204,7 @@ impl ThreadListView {
             tab_personal_btn,
             tab_newsletters_btn,
             tab_unread_btn,
+            status_label,
             all_threads,
             visible_threads,
             selected_thread_ids,
@@ -342,7 +360,7 @@ impl ThreadListView {
             }
         }
         if sel_count > 0 {
-            self.title.set_subtitle(&format!("{sel_count} selected • e: Archive, #: Delete, s: Star, Esc: Clear"));
+            self.title.set_subtitle(&format!("{sel_count} selected • e: Archive, v: Move, #: Delete, s: Star, Esc: Clear"));
         } else {
             let q = self.search_entry.text();
             let active_tab = self.filter_tab.get();
@@ -367,6 +385,11 @@ impl ThreadListView {
             self.list_box.select_row(Some(&row));
             row.grab_focus();
         }
+    }
+
+    /// Sets an explicit status label in the bottom status bar (e.g. "Checking for Mail...").
+    pub fn set_status(&self, text: &str) {
+        self.status_label.set_label(text);
     }
 
     /// Sets the full list of threads for the current folder and applies active search filter.
@@ -426,6 +449,8 @@ impl ThreadListView {
         } else {
             self.title.set_subtitle(&format!("{} matching", filtered.len()));
         }
+
+        self.status_label.set_label(&format_status_text(filtered.len(), unread_count));
 
         if filtered.is_empty() {
             let empty_row = gtk::ListBoxRow::new();
@@ -758,6 +783,17 @@ pub fn parse_display_name(raw: &str) -> String {
     cleaned.split('@').next().unwrap_or(cleaned).trim().to_string()
 }
 
+/// Formats the iOS Mail-style footer status text reflecting total messages and unread count.
+pub fn format_status_text(total: usize, unread: usize) -> String {
+    if total == 0 {
+        "No Messages".to_string()
+    } else if unread > 0 {
+        format!("Updated Just Now • {total} Messages, {unread} Unread")
+    } else {
+        format!("Updated Just Now • {total} Messages")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -852,5 +888,12 @@ mod tests {
         assert_eq!(parse_display_name("<team@omarchy.org>"), "team");
         assert_eq!(parse_display_name("bry@omarchy.org"), "bry");
         assert_eq!(parse_display_name("Mom"), "Mom");
+    }
+
+    #[test]
+    fn test_format_status_text() {
+        assert_eq!(format_status_text(0, 0), "No Messages");
+        assert_eq!(format_status_text(12, 0), "Updated Just Now • 12 Messages");
+        assert_eq!(format_status_text(15, 3), "Updated Just Now • 15 Messages, 3 Unread");
     }
 }

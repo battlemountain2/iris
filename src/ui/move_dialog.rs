@@ -176,9 +176,9 @@ fn create_folder_row(folder_name: &str, is_create: bool) -> gtk::ListBoxRow {
 
     let icon_name = match folder_name.to_lowercase().as_str() {
         "inbox" => "mail-folder-inbox-symbolic",
-        "archive" => "mail-archive-symbolic",
+        "archive" => crate::ui::icons::archive_icon(),
         "trash" => "user-trash-symbolic",
-        "sent" => "mail-sent-symbolic",
+        "sent" => crate::ui::icons::sent_icon(),
         "drafts" => "document-edit-symbolic",
         _ => {
             if is_create {

@@ -42,7 +42,7 @@ impl SidebarView {
         // Sync button in header
         let sync_btn = gtk::Button::builder()
             .icon_name("view-refresh-symbolic")
-            .tooltip_text("Sync Mailboxes (mbsync)")
+            .tooltip_text("Sync Mailboxes (Ctrl+R)")
             .build();
         sync_btn.add_css_class("flat");
         header.pack_end(&sync_btn);
@@ -129,6 +129,7 @@ impl SidebarView {
 
             let icon = gtk::Image::from_icon_name("folder-symbolic");
             icon.set_icon_size(gtk::IconSize::Normal);
+            icon.add_css_class("iris-sidebar-icon");
             hbox.append(&icon);
 
             let label = gtk::Label::builder()
@@ -274,8 +275,7 @@ fn populate_mailboxes(
         .margin_top(12)
         .margin_bottom(4)
         .build();
-    inboxes_label.add_css_class("dim-label");
-    inboxes_label.add_css_class("caption");
+    inboxes_label.add_css_class("iris-sidebar-section-header");
 
     let header_row1 = gtk::ListBoxRow::new();
     header_row1.set_selectable(false);
@@ -304,8 +304,7 @@ fn populate_mailboxes(
         .margin_top(16)
         .margin_bottom(4)
         .build();
-    views_label.add_css_class("dim-label");
-    views_label.add_css_class("caption");
+    views_label.add_css_class("iris-sidebar-section-header");
 
     let header_row2 = gtk::ListBoxRow::new();
     header_row2.set_selectable(false);
@@ -313,11 +312,11 @@ fn populate_mailboxes(
     header_row2.set_child(Some(&views_label));
     list_box.append(&header_row2);
 
-    add_row(list_box, badges, rows, "view:feed", "Feed & Newsletters", "newspaper-symbolic", None);
+    add_row(list_box, badges, rows, "view:feed", "Feed & Newsletters", crate::ui::icons::feed_icon(), None);
     add_row(list_box, badges, rows, "view:flagged", "Flagged", "starred-symbolic", None);
     add_row(list_box, badges, rows, "folder:drafts", "Drafts", "document-edit-symbolic", None);
-    add_row(list_box, badges, rows, "folder:sent", "Sent", "mail-sent-symbolic", None);
-    add_row(list_box, badges, rows, "folder:archive", "Archive", "mail-archive-symbolic", None);
+    add_row(list_box, badges, rows, "folder:sent", "Sent", crate::ui::icons::sent_icon(), None);
+    add_row(list_box, badges, rows, "folder:archive", "Archive", crate::ui::icons::archive_icon(), None);
     add_row(list_box, badges, rows, "folder:trash", "Trash", "user-trash-symbolic", None);
 
     // Section 3: Folders
@@ -332,8 +331,7 @@ fn populate_mailboxes(
         .xalign(0.0)
         .hexpand(true)
         .build();
-    folders_label.add_css_class("dim-label");
-    folders_label.add_css_class("caption");
+    folders_label.add_css_class("iris-sidebar-section-header");
     folders_box.append(&folders_label);
     folders_box.append(add_folder_btn);
 
@@ -364,6 +362,7 @@ fn add_row(
 
     let icon = gtk::Image::from_icon_name(icon_name);
     icon.set_icon_size(gtk::IconSize::Normal);
+    icon.add_css_class("iris-sidebar-icon");
     hbox.append(&icon);
 
     let label = gtk::Label::builder()
