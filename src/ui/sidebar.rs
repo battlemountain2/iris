@@ -43,7 +43,7 @@ impl SidebarView {
 
         // Sync button in header
         let sync_btn = gtk::Button::builder()
-            .icon_name("view-refresh-symbolic")
+            .icon_name(crate::ui::icons::refresh_icon())
             .tooltip_text("Sync Mailboxes (Ctrl+R)")
             .build();
         sync_btn.add_css_class("flat");
@@ -51,7 +51,7 @@ impl SidebarView {
 
         // Settings button in header
         let settings_btn = gtk::Button::builder()
-            .icon_name("emblem-system-symbolic")
+            .icon_name(crate::ui::icons::settings_icon())
             .tooltip_text("Preferences & Accounts (Ctrl+,)")
             .build();
         settings_btn.add_css_class("flat");
@@ -71,7 +71,7 @@ impl SidebarView {
         list_box.add_css_class("navigation-sidebar");
 
         let add_account_btn = gtk::Button::builder()
-            .icon_name("list-add-symbolic")
+            .icon_name(crate::ui::icons::plus_icon())
             .tooltip_text("Add Email Account")
             .has_frame(false)
             .valign(gtk::Align::Center)
@@ -80,7 +80,7 @@ impl SidebarView {
         add_account_btn.add_css_class("circular");
 
         let add_folder_btn = gtk::Button::builder()
-            .icon_name("list-add-symbolic")
+            .icon_name(crate::ui::icons::folder_new_icon())
             .tooltip_text("New Maildir Folder")
             .has_frame(false)
             .valign(gtk::Align::Center)
@@ -338,7 +338,7 @@ fn populate_mailboxes(
     header_row1.set_child(Some(&inboxes_box));
     list_box.append(&header_row1);
 
-    add_row(list_box, badges, rows, "inbox", "All Inboxes", crate::ui::icons::inbox_icon(), None);
+    add_row(list_box, badges, rows, "inbox", "All Inboxes", crate::ui::icons::all_inboxes_icon(), None);
 
     if accounts.is_empty() {
         add_row(

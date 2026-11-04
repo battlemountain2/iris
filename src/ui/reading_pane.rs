@@ -54,12 +54,12 @@ impl ReadingPaneView {
             .build();
 
         let move_btn = gtk::Button::builder()
-            .icon_name("folder-symbolic")
+            .icon_name(crate::ui::icons::folder_icon())
             .tooltip_text("Move to Folder... (v)")
             .build();
 
         let trash_btn = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
+            .icon_name(crate::ui::icons::trash_icon())
             .tooltip_text("Delete (#)")
             .build();
 
@@ -73,17 +73,17 @@ impl ReadingPaneView {
         triage_box.append(&trash_btn);
 
         let forward_btn = gtk::Button::builder()
-            .icon_name("mail-forward-symbolic")
+            .icon_name(crate::ui::icons::forward_icon())
             .tooltip_text("Forward (f)")
             .build();
 
         let reply_all_btn = gtk::Button::builder()
-            .icon_name("mail-reply-all-symbolic")
+            .icon_name(crate::ui::icons::reply_all_icon())
             .tooltip_text("Reply All (a)")
             .build();
 
         let reply_btn = gtk::Button::builder()
-            .icon_name("mail-reply-sender-symbolic")
+            .icon_name(crate::ui::icons::reply_icon())
             .tooltip_text("Reply (r)")
             .build();
 
@@ -97,7 +97,7 @@ impl ReadingPaneView {
         respond_box.append(&forward_btn);
 
         let edit_draft_btn = gtk::Button::builder()
-            .icon_name("document-edit-symbolic")
+            .icon_name(crate::ui::icons::drafts_icon())
             .tooltip_text("Edit Draft")
             .label("Edit Draft")
             .build();
@@ -110,7 +110,7 @@ impl ReadingPaneView {
             .build();
 
         let star_btn = gtk::Button::builder()
-            .icon_name("non-starred-symbolic")
+            .icon_name(crate::ui::icons::star_icon())
             .tooltip_text("Star / Flag (s)")
             .build();
 
@@ -230,11 +230,11 @@ impl ReadingPaneView {
 
         // Update Star icon
         if thread.is_flagged {
-            self.star_btn.set_icon_name("starred-symbolic");
+            self.star_btn.set_icon_name(crate::ui::icons::star_filled_icon());
             self.star_btn.set_tooltip_text(Some("Unstar (s)"));
             self.star_btn.add_css_class("accent");
         } else {
-            self.star_btn.set_icon_name("non-starred-symbolic");
+            self.star_btn.set_icon_name(crate::ui::icons::star_icon());
             self.star_btn.set_tooltip_text(Some("Star / Flag (s)"));
             self.star_btn.remove_css_class("accent");
         }
@@ -331,7 +331,7 @@ impl ReadingPaneView {
         self.move_btn.set_visible(false);
         self.archive_btn.set_visible(false);
         self.trash_btn.set_visible(false);
-        self.star_btn.set_icon_name("non-starred-symbolic");
+        self.star_btn.set_icon_name(crate::ui::icons::star_icon());
         self.edit_draft_btn.set_visible(false);
         self.reply_btn.set_visible(false);
         self.reply_all_btn.set_visible(false);
@@ -717,7 +717,7 @@ fn build_privacy_banner() -> (gtk::Box, gtk::Button, gtk::Button) {
     let banner = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     banner.add_css_class("iris-privacy-banner");
 
-    let shield_icon = gtk::Image::from_icon_name("security-high-symbolic");
+    let shield_icon = gtk::Image::from_icon_name(crate::ui::icons::shield_icon());
     shield_icon.add_css_class("iris-shield-icon");
     banner.append(&shield_icon);
 

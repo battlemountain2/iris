@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/io/github/battlemountain2/Iris">
+    <file>icons/scalable/actions/iris-all-inboxes-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-archive-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-attachment-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-check-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-chevron-down-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-chevron-right-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-circle-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-close-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-compose-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-drafts-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-feed-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-filter-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-flag-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-folder-new-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-folder-open-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-folder-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-forward-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-inbox-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-junk-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-keyboard-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-lock-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-mail-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-more-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-palette-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-pencil-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-plus-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-provider-custom-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-provider-fastmail-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-provider-gmail-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-provider-icloud-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-provider-outlook-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-refresh-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-reply-all-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-reply-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-search-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-sent-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-server-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-settings-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-shield-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-sidebar-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-star-filled-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-star-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-tag-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-trash-symbolic.svg</file>
+    <file>icons/scalable/actions/iris-user-symbolic.svg</file>
+  </gresource>
+</gresources>

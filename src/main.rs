@@ -32,6 +32,7 @@ fn main() -> glib::ExitCode {
         .build();
 
     application.connect_startup(|_| {
+        crate::ui::icons::register_bundled_icons();
         load_css();
     });
 

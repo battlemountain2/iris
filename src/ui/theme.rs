@@ -120,6 +120,10 @@ impl ThemeManager {
         self.apply_current();
     }
 
+    pub fn get_current_theme(&self) -> String {
+        self.current_id.borrow().clone()
+    }
+
     pub fn set_subtle_mode(&self, subtle: bool) {
         *self.subtle_mode.borrow_mut() = subtle;
         self.apply_current();

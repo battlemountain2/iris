@@ -22,10 +22,14 @@ pub struct ThreadListView {
     pub title: adw::WindowTitle,
     pub sidebar_toggle_btn: gtk::Button,
     pub compose_btn: gtk::Button,
+    #[allow(dead_code)]
+    pub filter_toggle_btn: gtk::Button,
     pub empty_trash_btn: gtk::Button,
     pub search_entry: gtk::SearchEntry,
     pub palette_btn: gtk::Button,
     pub filter_tab: Cell<FilterTab>,
+    #[allow(dead_code)]
+    pub tabs_box: gtk::Box,
     pub tab_all_btn: gtk::ToggleButton,
     pub tab_personal_btn: gtk::ToggleButton,
     pub tab_newsletters_btn: gtk::ToggleButton,
@@ -43,13 +47,13 @@ impl ThreadListView {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         container.add_css_class("iris-thread-pane");
 
-        // Headerbar with Sidebar Toggle, Title, Filter, and Compose Button
+        // Headerbar with Sidebar Toggle, Title, and Empty Trash Button
         let header = adw::HeaderBar::new();
         header.set_show_start_title_buttons(false);
 
         // Sidebar toggle button (iOS / macOS Mail sidebar toggle icon)
         let sidebar_toggle_btn = gtk::Button::builder()
-            .icon_name("sidebar-show-symbolic")
+            .icon_name(crate::ui::icons::sidebar_toggle_icon())
             .tooltip_text("Toggle Mailboxes (Ctrl+S)")
             .build();
         sidebar_toggle_btn.add_css_class("flat");
@@ -61,15 +65,8 @@ impl ThreadListView {
             .build();
         header.set_title_widget(Some(&title));
 
-        let compose_btn = gtk::Button::builder()
-            .icon_name("mail-message-new-symbolic")
-            .tooltip_text("Compose (c)")
-            .build();
-        compose_btn.add_css_class("suggested-action");
-        header.pack_end(&compose_btn);
-
         let empty_trash_btn = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
+            .icon_name(crate::ui::icons::trash_icon())
             .tooltip_text("Empty Trash (permanently delete all)")
             .label("Empty Trash")
             .visible(false)
@@ -131,10 +128,10 @@ impl ThreadListView {
             btn
         }
 
-        let tab_all_btn = make_filter_tab("All", "mail-read-symbolic");
+        let tab_all_btn = make_filter_tab("All", crate::ui::icons::inbox_icon());
         tab_all_btn.set_active(true);
 
-        let tab_personal_btn = make_filter_tab("Personal", "avatar-default-symbolic");
+        let tab_personal_btn = make_filter_tab("Personal", crate::ui::icons::user_icon());
         tab_personal_btn.set_group(Some(&tab_all_btn));
 
         let tab_newsletters_btn = make_filter_tab("Newsletters", crate::ui::icons::feed_icon());
@@ -164,21 +161,59 @@ impl ThreadListView {
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
 
-        // iOS Mail Bottom Status Bar
-        let status_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-        status_box.add_css_class("iris-status-bar");
-        status_box.set_margin_start(12);
-        status_box.set_margin_end(12);
-        status_box.set_margin_top(4);
-        status_box.set_margin_bottom(6);
-        status_box.set_halign(gtk::Align::Center);
+        // Authentic iOS Mail Bottom Toolbar:
+        // [ Filter Button (Left) ] ------ [ Status Label (Center) ] ------ [ Compose Button (Right) ]
+        let bottom_toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        bottom_toolbar.add_css_class("iris-bottom-toolbar");
+        bottom_toolbar.set_margin_start(12);
+        bottom_toolbar.set_margin_end(12);
+        bottom_toolbar.set_margin_top(6);
+        bottom_toolbar.set_margin_bottom(8);
+
+        let filter_toggle_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::filter_icon())
+            .tooltip_text("Filter Mail (Toggle Filter Bar)")
+            .valign(gtk::Align::Center)
+            .build();
+        filter_toggle_btn.add_css_class("flat");
+        filter_toggle_btn.add_css_class("circular");
+        filter_toggle_btn.add_css_class("iris-bottom-action-btn");
+        bottom_toolbar.append(&filter_toggle_btn);
 
         let status_label = gtk::Label::builder()
             .label("Updated Just Now")
+            .hexpand(true)
+            .xalign(0.5)
+            .valign(gtk::Align::Center)
             .build();
         status_label.add_css_class("iris-status-label");
-        status_box.append(&status_label);
-        container.append(&status_box);
+        bottom_toolbar.append(&status_label);
+
+        let compose_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::compose_icon())
+            .tooltip_text("Compose New Message (c)")
+            .valign(gtk::Align::Center)
+            .build();
+        compose_btn.add_css_class("flat");
+        compose_btn.add_css_class("circular");
+        compose_btn.add_css_class("iris-bottom-action-btn");
+        compose_btn.add_css_class("suggested-action");
+        bottom_toolbar.append(&compose_btn);
+
+        container.append(&bottom_toolbar);
+
+        // Filter button toggles visibility of the filter tabs bar
+        let tabs_box_toggle = tabs_box.clone();
+        let filter_btn_toggle = filter_toggle_btn.clone();
+        filter_toggle_btn.connect_clicked(move |_| {
+            let is_vis = tabs_box_toggle.is_visible();
+            tabs_box_toggle.set_visible(!is_vis);
+            if !is_vis {
+                filter_btn_toggle.add_css_class("accent");
+            } else {
+                filter_btn_toggle.remove_css_class("accent");
+            }
+        });
 
         // Escape inside search clears query and returns focus to list
         let list_box_focus = list_box.clone();
@@ -200,10 +235,12 @@ impl ThreadListView {
             title,
             sidebar_toggle_btn,
             compose_btn,
+            filter_toggle_btn,
             empty_trash_btn,
             search_entry,
             palette_btn,
             filter_tab,
+            tabs_box,
             tab_all_btn,
             tab_personal_btn,
             tab_newsletters_btn,
@@ -673,7 +710,7 @@ fn create_thread_card(
     }
     indicator_overlay.set_child(Some(&dot));
 
-    let select_icon = gtk::Image::from_icon_name("object-select-symbolic");
+    let select_icon = gtk::Image::from_icon_name("iris-check-symbolic");
     select_icon.set_icon_size(gtk::IconSize::Normal);
     select_icon.add_css_class("iris-select-circle");
     indicator_overlay.add_overlay(&select_icon);
@@ -712,14 +749,14 @@ fn create_thread_card(
     line1.append(&sender_label);
 
     if has_attachment {
-        let attach_icon = gtk::Image::from_icon_name("mail-attachment-symbolic");
+        let attach_icon = gtk::Image::from_icon_name(crate::ui::icons::attachment_icon());
         attach_icon.set_icon_size(gtk::IconSize::Normal);
         attach_icon.add_css_class("iris-icon-muted");
         line1.append(&attach_icon);
     }
 
     if is_flagged {
-        let flag_icon = gtk::Image::from_icon_name("starred-symbolic");
+        let flag_icon = gtk::Image::from_icon_name(crate::ui::icons::star_filled_icon());
         flag_icon.set_icon_size(gtk::IconSize::Normal);
         flag_icon.add_css_class("iris-icon-starred");
         line1.append(&flag_icon);

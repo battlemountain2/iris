@@ -888,14 +888,111 @@ dialog.iris-dialog {
 }
 
 /* ========================================================================= */
-/* 10. PREFERENCES & SETTINGS DIALOG                                         */
+/* 10. PREFERENCES & SETTINGS DIALOG (Hermes & macOS Two-Pane Layout)        */
 /* ========================================================================= */
 .iris-settings-dialog {
-  background-color: alpha(@theme_bg, 0.95);
-  backdrop-filter: blur(28px);
+  background-color: alpha(@theme_bg, 0.96);
+  backdrop-filter: blur(32px);
   color: @theme_text;
+  border-radius: 16px;
 }
 
 .iris-settings-dialog preferencespage {
   background-color: transparent;
+}
+
+.settings-navigation {
+  background-color: alpha(@theme_bg, 0.85);
+  border-right: 1px solid alpha(@theme_border, 0.40);
+  padding: 14px 10px 10px;
+}
+
+.settings-nav-heading {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: alpha(@theme_text, 0.50);
+  margin: 4px 6px 8px;
+}
+
+.settings-nav-filter {
+  background-color: alpha(@theme_surface, 0.60);
+  border: 1px solid alpha(@theme_border, 0.35);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.settings-nav-btn {
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 1px 0;
+  color: alpha(@theme_text, 0.85);
+  font-size: 13px;
+  font-weight: 500;
+  border-left: 3px solid transparent;
+  transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-nav-btn:hover {
+  background-color: alpha(@theme_surface, 0.80);
+  color: @theme_text;
+}
+
+.settings-nav-btn.settings-nav-active {
+  background-color: alpha(@theme_accent, 0.20);
+  border-left: 3px solid @theme_accent;
+  color: @theme_text;
+  font-weight: 600;
+}
+
+.settings-nav-icon {
+  color: @theme_accent;
+  opacity: 0.90;
+}
+
+.settings-page-content {
+  background-color: transparent;
+  padding: 10px 20px 24px;
+}
+
+/* ========================================================================= */
+/* 11. AUTHENTIC iOS MAIL BOTTOM TOOLBAR                                     */
+/* ========================================================================= */
+.iris-bottom-toolbar {
+  background-color: alpha(@theme_surface, 0.40);
+  border-top: 1px solid alpha(@theme_border, 0.45);
+  padding: 6px 12px;
+}
+
+.iris-bottom-action-btn {
+  border-radius: 50%;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 6px;
+  color: @theme_dim_text;
+  transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-bottom-action-btn:hover {
+  background-color: alpha(@theme_accent, 0.18);
+  color: @theme_accent;
+}
+
+.iris-bottom-action-btn.suggested-action {
+  background-color: alpha(@theme_accent, 0.22);
+  color: @theme_accent;
+  border: 1px solid alpha(@theme_accent, 0.50);
+}
+
+.iris-bottom-action-btn.suggested-action:hover {
+  background-color: @theme_accent;
+  color: @theme_on_accent;
+}
+
+.iris-bottom-action-btn.accent {
+  background-color: alpha(@theme_accent, 0.28);
+  color: @theme_accent;
 }
