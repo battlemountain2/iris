@@ -7,14 +7,14 @@
 window.iris-window,
 dialog,
 popover {
-  font-family: "SF Pro Text", "SF Pro", "Inter", -apple-system, system-ui, sans-serif;
+  font-family: "Inter", "SF Pro Text", "SF Pro", -apple-system, system-ui, sans-serif;
   -gtk-font-smoothing: antialiased;
 }
 
 headerbar .title,
 .iris-heading,
 .iris-title {
-  font-family: "SF Pro Display", "SF Pro", "Inter Display", sans-serif;
+  font-family: "Inter Display", "Inter", "SF Pro Display", "SF Pro", sans-serif;
   letter-spacing: -0.2px;
 }
 
@@ -268,73 +268,108 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 }
 
 /* iOS Mail Inset Grouped Message Cards */
-.iris-thread-pane list > row {
+.iris-thread-pane list > row,
+.iris-thread-pane list > row.iris-row-container {
   background: transparent;
   border: none;
   box-shadow: none;
-  padding: 0;
+  padding: 2px 8px;
   margin: 0;
 }
 
-.iris-thread-pane list > row:selected {
+.iris-thread-pane list > row:selected,
+.iris-thread-pane list > row.iris-row-container:selected {
   background: transparent;
 }
 
-.iris-thread-card,
-.iris-message-row {
-  margin: 4px 10px;
-  padding: 12px 14px;
+.iris-thread-card {
+  margin: 2px 0;
+  padding: 10px 14px;
   border-radius: 12px;
-  background-color: alpha(@theme_surface, 0.75);
-  border: 1px solid alpha(@theme_border, 0.55);
-  box-shadow: 0 1px 4px alpha(#000000, 0.10);
+  background-color: alpha(@theme_surface, 0.70);
+  border: 1px solid alpha(@theme_border, 0.45);
+  box-shadow: 0 1px 3px alpha(#000000, 0.12);
   transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.iris-thread-card:hover,
-.iris-message-row:hover,
-.iris-thread-pane list > row:hover .iris-message-row {
+.iris-thread-pane list > row:hover .iris-thread-card {
   background-color: alpha(@theme_surface, 0.95);
   border-color: alpha(@theme_accent, 0.40);
-  box-shadow: 0 2px 10px alpha(#000000, 0.16);
+  box-shadow: 0 2px 10px alpha(#000000, 0.18);
 }
 
-.iris-thread-card:selected,
-.iris-message-row:selected,
-.iris-thread-pane list > row:selected .iris-message-row {
-  background-color: alpha(@theme_accent, 0.22) !important;
-  border: 1px solid alpha(@theme_accent, 0.65) !important;
-  color: @theme_text !important;
-  box-shadow: 0 4px 16px alpha(@theme_accent, 0.22);
+.iris-thread-pane list > row:selected .iris-thread-card {
+  background-color: @theme_accent !important;
+  border: 1px solid @theme_accent !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 18px alpha(@theme_accent, 0.40);
 }
 
-.iris-thread-card:focus-visible,
-.iris-message-row:focus-visible {
+.iris-thread-pane list > row:selected .iris-row-sender,
+.iris-thread-pane list > row:selected .iris-row-subject {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.iris-thread-pane list > row:selected .iris-row-snippet {
+  color: alpha(#ffffff, 0.85) !important;
+}
+
+.iris-thread-pane list > row:selected .iris-row-date {
+  color: alpha(#ffffff, 0.80) !important;
+}
+
+.iris-thread-pane list > row:selected .iris-icon-muted,
+.iris-thread-pane list > row:selected .iris-icon-starred {
+  color: #ffffff !important;
+}
+
+.iris-thread-pane list > row:selected .iris-unread-dot {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 8px alpha(#ffffff, 0.90) !important;
+}
+
+.iris-thread-pane list > row:focus-visible {
   outline: 2px solid alpha(@theme_accent, 0.70);
   outline-offset: -1px;
 }
 
 /* Multi-Select Triage Active Rows */
-.iris-message-row.iris-row-multiselected {
+.iris-message-row.iris-row-multiselected .iris-thread-card {
   background-color: alpha(@theme_accent, 0.24);
   border: 1px solid alpha(@theme_accent, 0.55);
 }
 
-.iris-message-row.iris-row-multiselected:hover {
-  background-color: alpha(@theme_accent, 0.30);
+.iris-message-row.iris-row-multiselected:hover .iris-thread-card {
+  background-color: alpha(@theme_accent, 0.32);
 }
 
 /* iOS Swipe Gesture Feedback */
-.iris-message-row.swipe-archive {
-  background-color: alpha(#007aff, 0.28) !important;
-  border: 1px solid alpha(#007aff, 0.70) !important;
+.iris-message-row.swipe-read .iris-thread-card {
+  background-color: #007aff !important;
+  border-color: #007aff !important;
+  color: #ffffff !important;
   transition: background-color 80ms cubic-bezier(0.16, 1, 0.3, 1), border-color 80ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.iris-message-row.swipe-trash {
-  background-color: alpha(#ff3b30, 0.28) !important;
-  border: 1px solid alpha(#ff3b30, 0.70) !important;
+.iris-message-row.swipe-archive .iris-thread-card {
+  background-color: #5856d6 !important;
+  border-color: #5856d6 !important;
+  color: #ffffff !important;
   transition: background-color 80ms cubic-bezier(0.16, 1, 0.3, 1), border-color 80ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-message-row.swipe-trash .iris-thread-card {
+  background-color: #ff3b30 !important;
+  border-color: #ff3b30 !important;
+  color: #ffffff !important;
+  transition: background-color 80ms cubic-bezier(0.16, 1, 0.3, 1), border-color 80ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-message-row.swipe-read *,
+.iris-message-row.swipe-archive *,
+.iris-message-row.swipe-trash * {
+  color: #ffffff !important;
 }
 
 /* iOS Style Indicator Box (18px slot for Unread Dot or Selection Check) */
@@ -471,42 +506,73 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 /* ========================================================================= */
 .iris-reading-pane,
 navigation-split-view > widget.content-pane .iris-reading-pane {
-  background-color: @theme_reader;
+  background-color: @theme_bg;
 }
 
 .iris-reading-pane headerbar,
 .iris-reading-pane scrolledwindow {
-  background-color: @theme_reader;
+  background-color: @theme_bg;
 }
 
 .iris-reading-pane headerbar {
-  border-bottom: 1px solid alpha(@theme_text, 0.06);
+  border-bottom: 1px solid alpha(@theme_border, 0.40);
+  min-height: 52px;
+  padding: 0 8px;
 }
 
 .iris-reading-empty {
-  padding: 60px 24px;
+  padding: 80px 24px;
+}
+
+/* Reading Navigation Pill [ ∧ | ∨ ] */
+.iris-nav-pill {
+  background-color: alpha(@theme_surface, 0.65);
+  border: 1px solid alpha(@theme_border, 0.50);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.iris-nav-pill button {
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: @theme_dim_text;
+}
+
+.iris-nav-pill button:hover {
+  background-color: alpha(#ffffff, 0.10);
+  color: @theme_text;
 }
 
 /* Reading Body Text */
 .iris-reading-body {
-  font-size: 15px;
-  line-height: 1.6;
+  font-family: "Inter", "SF Pro Text", -apple-system, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.65;
   color: @theme_text;
 }
 
 .iris-reading-body a {
-  color: #60a5fa;
+  color: @theme_accent;
+  text-decoration: none;
+  font-weight: 500;
+  transition: text-decoration 120ms ease;
+}
+
+.iris-reading-body a:hover {
   text-decoration: underline;
 }
 
 /* Privacy Protection Banner */
 .iris-privacy-banner {
-  background-color: alpha(@theme_surface, 0.85);
-  border: 1px solid alpha(@theme_accent, 0.35);
-  border-radius: 8px;
-  margin: 10px 28px 0 28px;
-  padding: 6px 14px;
-  font-size: 12px;
+  background-color: alpha(@theme_surface, 0.90);
+  border: 1px solid alpha(@theme_accent, 0.45);
+  border-radius: 12px;
+  margin: 12px 28px 0 28px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  box-shadow: 0 2px 8px alpha(#000000, 0.15);
 }
 
 .iris-shield-icon {
@@ -514,20 +580,24 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 }
 
 .iris-pill-btn {
-  border-radius: 6px;
-  font-size: 12px;
-  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 12px;
+  background-color: alpha(@theme_accent, 0.20);
+  color: @theme_text;
+  border: 1px solid alpha(@theme_accent, 0.35);
 }
 
 .iris-pill-btn:hover {
-  background-color: alpha(@theme_accent, 0.20);
-  color: @theme_text;
+  background-color: @theme_accent;
+  color: #ffffff;
 }
 
 /* Multi-Message Conversation Cards */
 .iris-conversation-card {
   background-color: alpha(@theme_surface, 0.70);
-  border: 1px solid alpha(@theme_border, 0.80);
+  border: 1px solid alpha(@theme_border, 0.70);
   border-radius: 16px;
   padding: 24px 28px;
   box-shadow: 0 4px 20px alpha(#000000, 0.16);
@@ -536,9 +606,11 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 .iris-conversation-card.latest {
   background-color: alpha(@theme_surface, 0.95);
-  border: 1px solid alpha(@theme_border, 0.95);
-  padding: 26px 32px;
-  box-shadow: 0 8px 30px alpha(#000000, 0.24);
+  border: 1px solid alpha(@theme_border, 0.75);
+  border-radius: 16px;
+  padding: 28px 34px;
+  box-shadow: 0 8px 32px alpha(#000000, 0.28);
+  margin-bottom: 24px;
 }
 
 .iris-conversation-card.collapsed {
@@ -554,23 +626,59 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 .iris-card-divider {
   margin: 14px 0 18px 0;
-  opacity: 0.15;
+  opacity: 0.20;
 }
 
 .iris-subject-title {
-  font-family: "SF Pro Display", "SF Pro", "Inter Display", sans-serif;
-  font-size: 25px;
+  font-family: "Inter Display", "Inter", "SF Pro Display", sans-serif;
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.45px;
+  letter-spacing: -0.35px;
   color: @theme_text;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+/* Contact Header in Reading Pane */
+.iris-contact-header {
+  margin-bottom: 4px;
+}
+
+.iris-reader-avatar {
+  border-radius: 50%;
+  box-shadow: 0 2px 6px alpha(#000000, 0.25);
+}
+
+.iris-sender-heading {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: @theme_text;
+}
+
+.iris-shield-mini {
+  color: @theme_accent;
+  opacity: 0.85;
+}
+
+.iris-reader-date {
+  font-size: 12.5px;
+  color: alpha(@theme_dim_text, 0.85);
+}
+
+.iris-recipient-chip {
+  background-color: alpha(@theme_accent, 0.16);
+  color: @theme_accent;
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid alpha(@theme_accent, 0.25);
 }
 
 /* Attachment Cards */
 .iris-attachment-card {
-  background-color: alpha(@theme_surface, 0.60);
-  border: 1px solid alpha(@theme_text, 0.10);
-  border-radius: 8px;
+  background-color: alpha(@theme_bg, 0.60);
+  border: 1px solid alpha(@theme_border, 0.50);
+  border-radius: 10px;
   padding: 10px 14px;
   transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -582,7 +690,7 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 /* Reading Pane Action Group Buttons (Sleek Segmented iOS Toolbar Pills) */
 .iris-reading-pane headerbar .linked {
-  background-color: alpha(@theme_surface, 0.70);
+  background-color: alpha(@theme_surface, 0.65);
   border: 1px solid alpha(@theme_border, 0.45);
   border-radius: 8px;
   padding: 2px;

@@ -11,6 +11,8 @@ use crate::services::html_renderer::render_body_markup;
 pub struct ReadingPaneView {
     pub container: gtk::Box,
     pub back_btn: gtk::Button,
+    pub prev_btn: gtk::Button,
+    pub next_btn: gtk::Button,
     pub archive_btn: gtk::Button,
     pub trash_btn: gtk::Button,
     pub move_btn: gtk::Button,
@@ -37,7 +39,7 @@ impl ReadingPaneView {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         container.add_css_class("iris-reading-pane");
 
-        // Action Headerbar (Back, Archive, Trash, Forward, Reply All, Reply, Star)
+        // Action Headerbar (Back, Prev/Next Navigation, Grouped iOS Action Pills)
         let header = adw::HeaderBar::new();
         header.set_show_title(false);
 
@@ -47,6 +49,27 @@ impl ReadingPaneView {
             .build();
         back_btn.add_css_class("flat");
         header.pack_start(&back_btn);
+
+        // Previous / Next Message Navigation Capsule [ ∧ | ∨ ]
+        let prev_btn = gtk::Button::builder()
+            .icon_name("go-up-symbolic")
+            .tooltip_text("Previous Conversation (k)")
+            .build();
+        prev_btn.add_css_class("flat");
+
+        let next_btn = gtk::Button::builder()
+            .icon_name("go-down-symbolic")
+            .tooltip_text("Next Conversation (j)")
+            .build();
+        next_btn.add_css_class("flat");
+
+        let nav_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        nav_box.add_css_class("linked");
+        nav_box.add_css_class("iris-nav-pill");
+        nav_box.set_margin_start(4);
+        nav_box.append(&prev_btn);
+        nav_box.append(&next_btn);
+        header.pack_start(&nav_box);
 
         let archive_btn = gtk::Button::builder()
             .icon_name(crate::ui::icons::archive_icon())
@@ -188,6 +211,8 @@ impl ReadingPaneView {
         let view = Self {
             container,
             back_btn,
+            prev_btn,
+            next_btn,
             archive_btn,
             trash_btn,
             move_btn,
@@ -219,6 +244,9 @@ impl ReadingPaneView {
 
     /// Dynamically loads and renders a thread's messages into the reading pane.
     pub fn display_thread(&self, thread: &Thread) {
+        self.prev_btn.set_sensitive(true);
+        self.next_btn.set_sensitive(true);
+
         self.subject_label.set_visible(true);
         self.subject_label.set_text(&thread.subject);
 
@@ -324,6 +352,8 @@ impl ReadingPaneView {
     /// Resets the reading pane to an empty placeholder state when no thread is selected.
     pub fn clear(&self) {
         *self.current_thread.borrow_mut() = None;
+        self.prev_btn.set_sensitive(false);
+        self.next_btn.set_sensitive(false);
         self.allow_remote_images.set(false);
         self.subject_label.set_visible(false);
         self.star_btn.set_visible(false);
@@ -386,7 +416,7 @@ fn build_conversation_card(
     allow_remote_images: bool,
     toast_overlay: Option<adw::ToastOverlay>,
 ) -> gtk::Box {
-    let card = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    let card = gtk::Box::new(gtk::Orientation::Vertical, 14);
     card.add_css_class("iris-conversation-card");
     if is_latest {
         card.add_css_class("latest");
@@ -394,19 +424,21 @@ fn build_conversation_card(
         card.add_css_class("collapsed");
     }
 
-    // Header Row
+    // Header Row (Avatar, Sender Details, Privacy Shield, Date)
     let header_box = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     header_box.set_hexpand(true);
+    header_box.add_css_class("iris-contact-header");
 
     let clean_name = parse_display_name(&message.from);
     let avatar = adw::Avatar::builder()
-        .size(if is_latest { 40 } else { 32 })
+        .size(if is_latest { 42 } else { 32 })
         .text(&clean_name)
         .show_initials(true)
         .build();
+    avatar.add_css_class("iris-reader-avatar");
     header_box.append(&avatar);
 
-    let text_vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    let text_vbox = gtk::Box::new(gtk::Orientation::Vertical, 3);
     text_vbox.set_hexpand(true);
 
     let top_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -415,8 +447,13 @@ fn build_conversation_card(
         .xalign(0.0)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
-    name_label.add_css_class(if is_latest { "heading" } else { "body" });
+    name_label.add_css_class(if is_latest { "iris-sender-heading" } else { "body" });
     top_row.append(&name_label);
+
+    let privacy_shield = gtk::Image::from_icon_name(crate::ui::icons::shield_icon());
+    privacy_shield.set_tooltip_text(Some("Mail Privacy Protection Active"));
+    privacy_shield.add_css_class("iris-shield-mini");
+    top_row.append(&privacy_shield);
 
     let local_dt = message.date.with_timezone(&chrono::Local);
     let date_str = local_dt.format("%b %-d, %Y at %-I:%M %p").to_string();
@@ -427,18 +464,29 @@ fn build_conversation_card(
         .build();
     date_label.add_css_class("caption");
     date_label.add_css_class("dim-label");
+    date_label.add_css_class("iris-reader-date");
     top_row.append(&date_label);
     text_vbox.append(&top_row);
 
-    // Subtitle: Email address when expanded, snippet when collapsed
+    // Subtitle Row: "From: <email>" and a neat pill badge "To: me"
+    let sub_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     let email_label = gtk::Label::builder()
-        .label(&format!("From: {} · To: {}", message.from, message.to.join(", ")))
+        .label(&format!("From: {}", message.from))
         .xalign(0.0)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     email_label.add_css_class("caption");
     email_label.add_css_class("dim-label");
-    text_vbox.append(&email_label);
+    sub_row.append(&email_label);
+
+    let to_chip = gtk::Label::builder()
+        .label(if message.to.is_empty() { "To: me".to_string() } else { format!("To: {}", message.to.join(", ")) })
+        .xalign(0.0)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .build();
+    to_chip.add_css_class("iris-recipient-chip");
+    sub_row.append(&to_chip);
+    text_vbox.append(&sub_row);
 
     let snippet_text = message
         .body_plain

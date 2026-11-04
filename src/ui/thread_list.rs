@@ -38,6 +38,7 @@ pub struct ThreadListView {
     pub all_threads: RefCell<Vec<Thread>>,
     pub visible_threads: RefCell<Vec<Thread>>,
     pub selected_thread_ids: Rc<RefCell<std::collections::HashSet<String>>>,
+    pub swipe_read_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
     pub swipe_archive_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
     pub swipe_trash_cb: RefCell<Option<Rc<dyn Fn(Thread)>>>,
 }
@@ -225,6 +226,7 @@ impl ThreadListView {
         let all_threads = RefCell::new(Vec::new());
         let visible_threads = RefCell::new(Vec::new());
         let selected_thread_ids = Rc::new(RefCell::new(std::collections::HashSet::new()));
+        let swipe_read_cb = RefCell::new(None);
         let swipe_archive_cb = RefCell::new(None);
         let swipe_trash_cb = RefCell::new(None);
         let filter_tab = Cell::new(FilterTab::All);
@@ -249,11 +251,19 @@ impl ThreadListView {
             all_threads,
             visible_threads,
             selected_thread_ids,
+            swipe_read_cb,
             swipe_archive_cb,
             swipe_trash_cb,
         };
 
         view
+    }
+
+    pub fn connect_swipe_read<F>(&self, callback: F)
+    where
+        F: Fn(Thread) + 'static,
+    {
+        *self.swipe_read_cb.borrow_mut() = Some(Rc::new(callback));
     }
 
     pub fn connect_swipe_archive<F>(&self, callback: F)
@@ -528,6 +538,7 @@ impl ThreadListView {
             return;
         }
 
+        let read_cb = self.swipe_read_cb.borrow().clone();
         let archive_cb = self.swipe_archive_cb.borrow().clone();
         let trash_cb = self.swipe_trash_cb.borrow().clone();
         let sel_ids = self.selected_thread_ids.borrow();
@@ -558,6 +569,7 @@ impl ThreadListView {
                 thread.is_flagged,
                 has_attachment,
                 is_selected,
+                read_cb.clone(),
                 archive_cb.clone(),
                 trash_cb.clone(),
             );
@@ -630,11 +642,13 @@ fn create_thread_card(
     is_flagged: bool,
     has_attachment: bool,
     is_multiselected: bool,
+    on_toggle_read: Option<Rc<dyn Fn(Thread)>>,
     on_archive: Option<Rc<dyn Fn(Thread)>>,
     on_trash: Option<Rc<dyn Fn(Thread)>>,
 ) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.add_css_class("iris-message-row");
+    row.add_css_class("iris-row-container");
     if is_multiselected {
         row.add_css_class("iris-row-multiselected");
     }
@@ -645,6 +659,7 @@ fn create_thread_card(
 
     let row_drag = row.clone();
     let row_end = row.clone();
+    let thread_for_read = thread.clone();
     let thread_for_arch = thread.clone();
     let thread_for_trash = thread.clone();
 
@@ -652,36 +667,50 @@ fn create_thread_card(
         // Only react when motion is dominantly horizontal
         if offset_x.abs() > offset_y.abs() * 1.1 {
             if offset_x > 25.0 {
-                row_drag.add_css_class("swipe-archive");
+                row_drag.add_css_class("swipe-read");
                 row_drag.remove_css_class("swipe-trash");
-            } else if offset_x < -25.0 {
+                row_drag.remove_css_class("swipe-archive");
+            } else if offset_x < -70.0 {
                 row_drag.add_css_class("swipe-trash");
                 row_drag.remove_css_class("swipe-archive");
+                row_drag.remove_css_class("swipe-read");
+            } else if offset_x < -25.0 {
+                row_drag.add_css_class("swipe-archive");
+                row_drag.remove_css_class("swipe-trash");
+                row_drag.remove_css_class("swipe-read");
             } else {
+                row_drag.remove_css_class("swipe-read");
                 row_drag.remove_css_class("swipe-archive");
                 row_drag.remove_css_class("swipe-trash");
             }
         } else {
+            row_drag.remove_css_class("swipe-read");
             row_drag.remove_css_class("swipe-archive");
             row_drag.remove_css_class("swipe-trash");
         }
     });
 
     gesture.connect_drag_end(move |_gesture, offset_x, offset_y| {
+        row_end.remove_css_class("swipe-read");
         row_end.remove_css_class("swipe-archive");
         row_end.remove_css_class("swipe-trash");
 
-        // Trigger action if motion was dominantly horizontal and surpassed 50px threshold
-        if offset_x.abs() > offset_y.abs() * 1.2 && offset_x.abs() >= 50.0 {
+        // Trigger action if motion was dominantly horizontal and surpassed threshold
+        if offset_x.abs() > offset_y.abs() * 1.2 && offset_x.abs() >= 45.0 {
             if offset_x > 0.0 {
-                // Swiped right -> Archive
-                if let Some(ref cb) = on_archive {
-                    cb(thread_for_arch.clone());
+                // Swiped right -> Toggle Read/Unread (Royal Blue #007aff)
+                if let Some(ref cb) = on_toggle_read {
+                    cb(thread_for_read.clone());
                 }
-            } else {
-                // Swiped left -> Trash
+            } else if offset_x < -75.0 {
+                // Full swipe left -> Trash (Red #ff3b30)
                 if let Some(ref cb) = on_trash {
                     cb(thread_for_trash.clone());
+                }
+            } else {
+                // Short swipe left -> Archive (Purple #5856d6)
+                if let Some(ref cb) = on_archive {
+                    cb(thread_for_arch.clone());
                 }
             }
         }
@@ -690,6 +719,10 @@ fn create_thread_card(
     row.add_controller(gesture);
 
     let card_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    card_hbox.add_css_class("iris-thread-card");
+    if is_unread {
+        card_hbox.add_css_class("unread");
+    }
     card_hbox.set_margin_start(10);
     card_hbox.set_margin_end(10);
     card_hbox.set_margin_top(8);

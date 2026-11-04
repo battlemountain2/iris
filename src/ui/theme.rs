@@ -155,34 +155,57 @@ impl ThemeManager {
              \n\
              .iris-thread-pane,\n\
              navigation-split-view > widget.content-pane .iris-thread-pane {{\n\
-                 background-color: @theme_surface;\n\
+                 background-color: @theme_bg;\n\
                  color: @theme_text;\n\
              }}\n\
              \n\
              .iris-reading-pane,\n\
              navigation-split-view > widget.content-pane .iris-reading-pane {{\n\
-                 background-color: @theme_reader;\n\
+                 background-color: @theme_bg;\n\
                  color: @theme_text;\n\
              }}\n\
              \n\
              .iris-unread-dot {{\n\
-                 background-color: @theme_accent;\n\
-                 box-shadow: 0 0 6px alpha(@theme_accent, 0.5);\n\
+                 background-color: #007aff;\n\
+                 box-shadow: 0 0 8px alpha(#007aff, 0.65);\n\
              }}\n\
              \n\
              .iris-unread-badge {{\n\
-                 background-color: @theme_accent;\n\
-                 box-shadow: 0 0 6px alpha(@theme_accent, 0.5);\n\
+                 background-color: #007aff;\n\
+                 box-shadow: 0 0 6px alpha(#007aff, 0.50);\n\
              }}\n\
              \n\
              .iris-star-badge {{\n\
                  color: @theme_highlight;\n\
              }}\n\
              \n\
-             .iris-message-row:selected,\n\
-             .iris-thread-card:selected {{\n\
-                 background-color: alpha(@theme_accent, 0.22);\n\
-                 border-color: alpha(@theme_accent, 0.55);\n\
+             .iris-thread-pane list > row:selected .iris-thread-card {{\n\
+                 background-color: @theme_accent;\n\
+                 border-color: @theme_accent;\n\
+                 box-shadow: 0 4px 16px alpha(@theme_accent, 0.35);\n\
+             }}\n\
+             \n\
+             .iris-thread-pane list > row:selected .iris-row-sender,\n\
+             .iris-thread-pane list > row:selected .iris-row-subject {{\n\
+                 color: #ffffff !important;\n\
+                 font-weight: 700;\n\
+             }}\n\
+             \n\
+             .iris-thread-pane list > row:selected .iris-row-snippet {{\n\
+                 color: alpha(#ffffff, 0.85) !important;\n\
+             }}\n\
+             \n\
+             .iris-thread-pane list > row:selected .iris-row-date {{\n\
+                 color: alpha(#ffffff, 0.80) !important;\n\
+             }}\n\
+             \n\
+             .iris-thread-pane list > row:selected .iris-unread-dot {{\n\
+                 background-color: #ffffff !important;\n\
+                 box-shadow: 0 0 8px alpha(#ffffff, 0.90) !important;\n\
+             }}\n\
+             \n\
+             .iris-thread-pane list > row:selected image {{\n\
+                 color: #ffffff !important;\n\
              }}\n\
              \n\
              .iris-multiselect-active .iris-row-multiselected .iris-select-circle {{\n\
@@ -190,9 +213,14 @@ impl ThemeManager {
              }}\n\
              \n\
              .iris-sidebar row:selected {{\n\
-                 background-color: alpha(@theme_accent, 0.28);\n\
-                 border-color: alpha(@theme_accent, 0.60);\n\
+                 background-color: @theme_accent;\n\
+                 border-color: @theme_accent;\n\
                  color: #ffffff;\n\
+             }}\n\
+             .iris-sidebar row:selected label,\n\
+             .iris-sidebar row:selected image {{\n\
+                 color: #ffffff;\n\
+             }}\n\
              }}\n",
             tokens.background,
             tokens.surface,

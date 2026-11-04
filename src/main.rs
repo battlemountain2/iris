@@ -1353,6 +1353,32 @@ fn build_ui(app: &adw::Application) {
         });
     }
 
+    // Connect Previous / Next Thread Navigation in Reading Pane Header
+    {
+        let tv_prev = thread_view.clone();
+        reading_view.prev_btn.connect_clicked(move |_| {
+            if let Some(row) = tv_prev.list_box.selected_row() {
+                let idx = row.index();
+                if idx > 0 {
+                    tv_prev.select_index((idx - 1) as usize);
+                }
+            }
+        });
+
+        let tv_next = thread_view.clone();
+        reading_view.next_btn.connect_clicked(move |_| {
+            if let Some(row) = tv_next.list_box.selected_row() {
+                let idx = row.index();
+                let total = tv_next.visible_threads.borrow().len();
+                if (idx as usize) + 1 < total {
+                    tv_next.select_index((idx + 1) as usize);
+                }
+            } else if !tv_next.visible_threads.borrow().is_empty() {
+                tv_next.select_index(0);
+            }
+        });
+    }
+
     // Connect Trackpad & Mouse Horizontal Swipe Gestures
     {
         let arch_fn = archive_thread_fn.clone();
@@ -1566,6 +1592,14 @@ fn build_ui(app: &adw::Application) {
             }
         })
     };
+
+    // Connect Trackpad & Mouse Horizontal Swipe Right -> Mark Read/Unread
+    {
+        let toggle_fn = do_toggle_read.clone();
+        thread_view.connect_swipe_read(move |_thread| {
+            toggle_fn();
+        });
+    }
 
     let do_focus_search = {
         let thread_view = thread_view.clone();
