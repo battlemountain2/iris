@@ -396,6 +396,16 @@ fn build_ui(app: &adw::Application) {
                         *state.current_folder.borrow_mut() = demo_account.join("Trash");
                         *state.current_title.borrow_mut() = "Trash".to_string();
                     }
+                    "folder:junk" => {
+                        let junk_dir = demo_account.join("Junk");
+                        let _ = services::maildir::ensure_maildir_folder(&junk_dir);
+                        *state.current_folder.borrow_mut() = junk_dir;
+                        *state.current_title.borrow_mut() = "Junk".to_string();
+                    }
+                    "view:today" => {
+                        *state.current_folder.borrow_mut() = demo_account.join("INBOX");
+                        *state.current_title.borrow_mut() = "Today".to_string();
+                    }
                     "view:feed" => {
                         *state.current_folder.borrow_mut() = demo_account.join("INBOX");
                         *state.current_title.borrow_mut() = "Feed & Newsletters".to_string();
@@ -603,6 +613,12 @@ fn build_ui(app: &adw::Application) {
     let win_for_compose = window.clone();
     thread_view.compose_btn.connect_clicked(move |_| {
         compose_ref.present(&win_for_compose);
+    });
+
+    let compose_ref_rv = compose_dialog.clone();
+    let win_for_compose_rv = window.clone();
+    reading_view.compose_btn.connect_clicked(move |_| {
+        compose_ref_rv.present(&win_for_compose_rv);
     });
 
     let edit_draft_ref = compose_dialog.clone();
@@ -1740,6 +1756,12 @@ fn build_ui(app: &adw::Application) {
     let win_for_palette = window.clone();
     thread_view.palette_btn.connect_clicked(move |_| {
         palette_ref.present(&win_for_palette);
+    });
+
+    let palette_ref_rv = palette.clone();
+    let win_for_palette_rv = window.clone();
+    reading_view.search_btn.connect_clicked(move |_| {
+        palette_ref_rv.present(&win_for_palette_rv);
     });
 
     let do_back = {

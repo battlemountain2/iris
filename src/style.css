@@ -149,21 +149,71 @@ navigation-split-view > navigation-page > .view,
   outline-offset: -1px;
 }
 
+/* macOS Window Controls Traffic Lights */
+.iris-traffic-lights {
+  margin-left: 10px;
+  margin-right: 6px;
+}
+
+.iris-traffic-dot {
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.20);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.iris-traffic-dot:hover {
+  transform: scale(1.12);
+}
+
+.iris-traffic-dot.close {
+  background-color: #ff5f56;
+}
+
+.iris-traffic-dot.minimize {
+  background-color: #ffbd2e;
+}
+
+.iris-traffic-dot.maximize {
+  background-color: #27c93f;
+}
+
 /* Sidebar Section Headers */
 .iris-sidebar-section-header {
   font-family: "SF Pro Text", "SF Pro", "Inter", sans-serif;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.85px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: alpha(@theme_dim_text, 0.70);
+  color: alpha(@theme_dim_text, 0.80);
   padding: 6px 0 2px 0;
 }
 
-/* Sidebar Icons */
+/* Sidebar Icons & Signature Apple Mail Colors */
 .iris-sidebar-icon {
-  opacity: 0.75;
+  opacity: 0.85;
   transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-sidebar-icon.icon-blue {
+  color: #007aff !important;
+}
+
+.iris-sidebar-icon.icon-orange {
+  color: #ff9500 !important;
+}
+
+.iris-sidebar-icon.icon-purple {
+  color: #af52de !important;
+}
+
+.iris-sidebar-icon.icon-red {
+  color: #ff3b30 !important;
+}
+
+.iris-sidebar-icon.icon-brown {
+  color: #a2845e !important;
 }
 
 .iris-sidebar row:hover .iris-sidebar-icon,
@@ -171,15 +221,19 @@ navigation-split-view > navigation-page > .view,
   opacity: 1.0;
 }
 
-/* Sidebar Count Badges */
+/* Sidebar Subtle Count Labels (macOS Mail Unboxed Numbers) */
 .iris-sidebar .badge {
-  background-color: alpha(@theme_accent, 0.22);
-  border: 1px solid alpha(@theme_accent, 0.40);
-  color: @theme_text;
-  border-radius: 12px;
-  padding: 1px 7px;
-  font-size: 11px;
-  font-weight: 600;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: alpha(@theme_dim_text, 0.85);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.iris-sidebar row:selected .badge {
+  color: #ffffff;
 }
 
 .iris-folder-row-actions {
@@ -267,56 +321,67 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
   box-shadow: 0 1px 3px alpha(#000000, 0.18);
 }
 
-/* iOS Mail Inset Grouped Message Cards */
+/* macOS Mail Continuous Flat Message List with 1px Hairline Dividers */
 .iris-thread-pane list > row,
 .iris-thread-pane list > row.iris-row-container {
   background: transparent;
   border: none;
   box-shadow: none;
-  padding: 2px 8px;
+  padding: 0;
   margin: 0;
+  border-bottom: 1px solid alpha(@theme_border, 0.40);
+  transition: background-color 80ms ease-out;
 }
 
 .iris-thread-pane list > row:selected,
 .iris-thread-pane list > row.iris-row-container:selected {
   background: transparent;
+  border-bottom-color: transparent;
 }
 
 .iris-thread-card {
-  margin: 2px 0;
+  margin: 0;
   padding: 10px 14px;
-  border-radius: 12px;
-  background-color: alpha(@theme_surface, 0.70);
-  border: 1px solid alpha(@theme_border, 0.45);
-  box-shadow: 0 1px 3px alpha(#000000, 0.12);
-  transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 0;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  transition: background-color 90ms ease-out;
 }
 
 .iris-thread-pane list > row:hover .iris-thread-card {
-  background-color: alpha(@theme_surface, 0.95);
-  border-color: alpha(@theme_accent, 0.40);
-  box-shadow: 0 2px 10px alpha(#000000, 0.18);
+  background-color: alpha(@theme_text, 0.04);
 }
 
+/* Selected Message: Signature Apple Royal Blue Rounded Island */
 .iris-thread-pane list > row:selected .iris-thread-card {
-  background-color: @theme_accent !important;
-  border: 1px solid @theme_accent !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 18px alpha(@theme_accent, 0.40);
+  background-color: #007aff !important;
+  border-radius: 7px !important;
+  margin: 2px 6px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15) !important;
 }
 
-.iris-thread-pane list > row:selected .iris-row-sender,
-.iris-thread-pane list > row:selected .iris-row-subject {
+.iris-thread-pane list > row:selected * {
+  color: #ffffff !important;
+}
+
+.iris-thread-pane list > row:selected .iris-row-sender {
   color: #ffffff !important;
   font-weight: 700;
 }
 
+.iris-thread-pane list > row:selected .iris-row-subject {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
 .iris-thread-pane list > row:selected .iris-row-snippet {
-  color: alpha(#ffffff, 0.85) !important;
+  color: alpha(#ffffff, 0.90) !important;
 }
 
 .iris-thread-pane list > row:selected .iris-row-date {
-  color: alpha(#ffffff, 0.80) !important;
+  color: alpha(#ffffff, 0.85) !important;
 }
 
 .iris-thread-pane list > row:selected .iris-icon-muted,
@@ -326,7 +391,7 @@ navigation-split-view > widget.content-pane .iris-thread-pane {
 
 .iris-thread-pane list > row:selected .iris-unread-dot {
   background-color: #ffffff !important;
-  box-shadow: 0 0 8px alpha(#ffffff, 0.90) !important;
+  box-shadow: 0 0 6px alpha(#ffffff, 0.8) !important;
 }
 
 .iris-thread-pane list > row:focus-visible {
@@ -516,8 +581,32 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 
 .iris-reading-pane headerbar {
   border-bottom: 1px solid alpha(@theme_border, 0.40);
-  min-height: 52px;
-  padding: 0 8px;
+  min-height: 50px;
+  padding: 0 10px;
+}
+
+/* macOS Mail Flat Toolbar Buttons */
+.iris-reading-pane headerbar button {
+  border-radius: 6px;
+  padding: 4px 7px;
+  margin: 0 1px;
+  background-color: transparent;
+  border: 1px solid transparent;
+  color: @theme_text;
+  transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-reading-pane headerbar button:hover {
+  background-color: alpha(@theme_text, 0.08);
+  border-color: alpha(@theme_text, 0.04);
+}
+
+.iris-reading-pane headerbar button:active {
+  background-color: alpha(@theme_text, 0.14);
+}
+
+.iris-reading-pane headerbar button:disabled {
+  opacity: 0.35;
 }
 
 .iris-reading-empty {
@@ -649,9 +738,26 @@ navigation-split-view > widget.content-pane .iris-reading-pane {
 }
 
 .iris-sender-heading {
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
   color: @theme_text;
+}
+
+.iris-sender-chip {
+  font-size: 12px;
+  color: alpha(@theme_dim_text, 0.90);
+  background-color: alpha(@theme_text, 0.05);
+  border-radius: 12px;
+  padding: 1px 8px;
+}
+
+.iris-card-subject {
+  font-family: "SF Pro Text", "SF Pro", "Inter", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: @theme_text;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 
 .iris-shield-mini {

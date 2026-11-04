@@ -33,6 +33,30 @@ impl SidebarView {
 
         let header = adw::HeaderBar::new();
         header.set_show_end_title_buttons(false);
+        header.set_show_start_title_buttons(false);
+
+        // macOS Window Controls Traffic Lights (Red, Yellow, Green)
+        let traffic_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        traffic_box.add_css_class("iris-traffic-lights");
+        traffic_box.set_valign(gtk::Align::Center);
+
+        let close_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        close_dot.add_css_class("iris-traffic-dot");
+        close_dot.add_css_class("close");
+
+        let min_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        min_dot.add_css_class("iris-traffic-dot");
+        min_dot.add_css_class("minimize");
+
+        let max_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        max_dot.add_css_class("iris-traffic-dot");
+        max_dot.add_css_class("maximize");
+
+        traffic_box.append(&close_dot);
+        traffic_box.append(&min_dot);
+        traffic_box.append(&max_dot);
+
+        header.pack_start(&traffic_box);
 
         let acct_count = if accounts.is_empty() { 3 } else { accounts.len() };
         let title = adw::WindowTitle::builder()
@@ -150,6 +174,7 @@ impl SidebarView {
             let icon = gtk::Image::from_icon_name(crate::ui::icons::folder_icon());
             icon.set_icon_size(gtk::IconSize::Normal);
             icon.add_css_class("iris-sidebar-icon");
+            icon.add_css_class("icon-blue");
             hbox.append(&icon);
 
             let label = gtk::Label::builder()
@@ -316,29 +341,70 @@ fn populate_mailboxes(
     badges: &mut HashMap<String, gtk::Label>,
     rows: &mut HashMap<String, gtk::ListBoxRow>,
 ) {
-    // Section 1: Inboxes
-    let inboxes_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    inboxes_box.set_margin_start(16);
-    inboxes_box.set_margin_end(8);
-    inboxes_box.set_margin_top(12);
-    inboxes_box.set_margin_bottom(4);
-
-    let inboxes_label = gtk::Label::builder()
-        .label("INBOXES")
+    // Section 1: FAVORITES (Apple Mail North Star Layout)
+    let fav_label = gtk::Label::builder()
+        .label("FAVORITES")
         .xalign(0.0)
-        .hexpand(true)
+        .margin_start(16)
+        .margin_top(12)
+        .margin_bottom(4)
         .build();
-    inboxes_label.add_css_class("iris-sidebar-section-header");
-    inboxes_box.append(&inboxes_label);
-    inboxes_box.append(add_account_btn);
+    fav_label.add_css_class("iris-sidebar-section-header");
 
     let header_row1 = gtk::ListBoxRow::new();
     header_row1.set_selectable(false);
     header_row1.set_activatable(false);
-    header_row1.set_child(Some(&inboxes_box));
+    header_row1.set_child(Some(&fav_label));
     list_box.append(&header_row1);
 
-    add_row(list_box, badges, rows, "inbox", "All Inboxes", crate::ui::icons::all_inboxes_icon(), None);
+    add_row(list_box, badges, rows, "inbox", "All Inboxes", crate::ui::icons::all_inboxes_icon(), Some("icon-blue"), None);
+    add_row(list_box, badges, rows, "view:today", "Today", "alarm-symbolic", Some("icon-blue"), None);
+    add_row(list_box, badges, rows, "view:flagged", "Flagged", crate::ui::icons::flagged_icon(), Some("icon-orange"), None);
+    add_row(list_box, badges, rows, "folder:drafts", "Drafts", crate::ui::icons::drafts_icon(), Some("icon-blue"), None);
+    add_row(list_box, badges, rows, "folder:sent", "Sent", crate::ui::icons::sent_icon(), Some("icon-blue"), None);
+    add_row(list_box, badges, rows, "folder:archive", "Archive", crate::ui::icons::archive_icon(), Some("icon-purple"), None);
+    add_row(list_box, badges, rows, "folder:trash", "Trash", crate::ui::icons::trash_icon(), Some("icon-red"), None);
+    add_row(list_box, badges, rows, "folder:junk", "Junk", crate::ui::icons::junk_icon(), Some("icon-brown"), None);
+
+    // Section 2: SMART MAILBOXES
+    let smart_label = gtk::Label::builder()
+        .label("SMART MAILBOXES")
+        .xalign(0.0)
+        .margin_start(16)
+        .margin_top(14)
+        .margin_bottom(4)
+        .build();
+    smart_label.add_css_class("iris-sidebar-section-header");
+
+    let header_row2 = gtk::ListBoxRow::new();
+    header_row2.set_selectable(false);
+    header_row2.set_activatable(false);
+    header_row2.set_child(Some(&smart_label));
+    list_box.append(&header_row2);
+
+    add_row(list_box, badges, rows, "view:feed", "Feed & Newsletters", crate::ui::icons::feed_icon(), Some("icon-blue"), None);
+
+    // Section 3: ON MY MAC (with add_account_btn on the right)
+    let acct_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    acct_box.set_margin_start(16);
+    acct_box.set_margin_end(8);
+    acct_box.set_margin_top(14);
+    acct_box.set_margin_bottom(4);
+
+    let acct_label = gtk::Label::builder()
+        .label("ON MY MAC")
+        .xalign(0.0)
+        .hexpand(true)
+        .build();
+    acct_label.add_css_class("iris-sidebar-section-header");
+    acct_box.append(&acct_label);
+    acct_box.append(add_account_btn);
+
+    let header_row3 = gtk::ListBoxRow::new();
+    header_row3.set_selectable(false);
+    header_row3.set_activatable(false);
+    header_row3.set_child(Some(&acct_box));
+    list_box.append(&header_row3);
 
     if accounts.is_empty() {
         add_row(
@@ -348,6 +414,7 @@ fn populate_mailboxes(
             "account:demo",
             "Gmail (Personal)",
             crate::ui::icons::account_icon("Gmail (Personal)", "bry@gmail.com"),
+            Some("icon-blue"),
             Some(2),
         );
         add_row(
@@ -357,6 +424,7 @@ fn populate_mailboxes(
             "account:work",
             "Gmail (Work)",
             crate::ui::icons::account_icon("Gmail (Work)", "brayan@work.com"),
+            Some("icon-blue"),
             None,
         );
         add_row(
@@ -366,44 +434,22 @@ fn populate_mailboxes(
             "account:icloud",
             "iCloud",
             crate::ui::icons::account_icon("iCloud", "brayan@icloud.com"),
+            Some("icon-blue"),
             Some(1),
         );
     } else {
         for acct in accounts {
             let row_id = format!("account:{}", acct.id);
             let icon = crate::ui::icons::account_icon(&acct.display_name, &acct.email);
-            add_row(list_box, badges, rows, &row_id, &acct.display_name, icon, None);
+            add_row(list_box, badges, rows, &row_id, &acct.display_name, icon, Some("icon-blue"), None);
         }
     }
 
-    // Section 2: Smart Views
-    let views_label = gtk::Label::builder()
-        .label("VIEWS")
-        .xalign(0.0)
-        .margin_start(16)
-        .margin_top(16)
-        .margin_bottom(4)
-        .build();
-    views_label.add_css_class("iris-sidebar-section-header");
-
-    let header_row2 = gtk::ListBoxRow::new();
-    header_row2.set_selectable(false);
-    header_row2.set_activatable(false);
-    header_row2.set_child(Some(&views_label));
-    list_box.append(&header_row2);
-
-    add_row(list_box, badges, rows, "view:feed", "Feed & Newsletters", crate::ui::icons::feed_icon(), None);
-    add_row(list_box, badges, rows, "view:flagged", "Flagged", crate::ui::icons::flagged_icon(), None);
-    add_row(list_box, badges, rows, "folder:drafts", "Drafts", crate::ui::icons::drafts_icon(), None);
-    add_row(list_box, badges, rows, "folder:sent", "Sent", crate::ui::icons::sent_icon(), None);
-    add_row(list_box, badges, rows, "folder:archive", "Archive", crate::ui::icons::archive_icon(), None);
-    add_row(list_box, badges, rows, "folder:trash", "Trash", crate::ui::icons::trash_icon(), None);
-
-    // Section 3: Folders
+    // Section 4: FOLDERS (with add_folder_btn on the right)
     let folders_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     folders_box.set_margin_start(16);
     folders_box.set_margin_end(8);
-    folders_box.set_margin_top(16);
+    folders_box.set_margin_top(14);
     folders_box.set_margin_bottom(4);
 
     let folders_label = gtk::Label::builder()
@@ -415,11 +461,11 @@ fn populate_mailboxes(
     folders_box.append(&folders_label);
     folders_box.append(add_folder_btn);
 
-    let header_row3 = gtk::ListBoxRow::new();
-    header_row3.set_selectable(false);
-    header_row3.set_activatable(false);
-    header_row3.set_child(Some(&folders_box));
-    list_box.append(&header_row3);
+    let header_row4 = gtk::ListBoxRow::new();
+    header_row4.set_selectable(false);
+    header_row4.set_activatable(false);
+    header_row4.set_child(Some(&folders_box));
+    list_box.append(&header_row4);
 }
 
 fn add_row(
@@ -429,6 +475,7 @@ fn add_row(
     id: &str,
     title: &str,
     icon_name: &str,
+    icon_color_class: Option<&str>,
     unread: Option<u32>,
 ) {
     let row = gtk::ListBoxRow::new();
@@ -437,19 +484,24 @@ fn add_row(
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     hbox.set_margin_start(12);
     hbox.set_margin_end(12);
-    hbox.set_margin_top(8);
-    hbox.set_margin_bottom(8);
+    hbox.set_margin_top(6);
+    hbox.set_margin_bottom(6);
 
     let icon = gtk::Image::from_icon_name(icon_name);
     icon.set_icon_size(gtk::IconSize::Normal);
     icon.add_css_class("iris-sidebar-icon");
+    if let Some(color_class) = icon_color_class {
+        icon.add_css_class(color_class);
+    }
     hbox.append(&icon);
 
     let label = gtk::Label::builder()
         .label(title)
         .xalign(0.0)
         .hexpand(true)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
+    label.add_css_class("iris-sidebar-label");
     hbox.append(&label);
 
     let badge = gtk::Label::builder()

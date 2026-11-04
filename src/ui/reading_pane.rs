@@ -11,6 +11,7 @@ use crate::services::html_renderer::render_body_markup;
 pub struct ReadingPaneView {
     pub container: gtk::Box,
     pub back_btn: gtk::Button,
+    pub compose_btn: gtk::Button,
     pub prev_btn: gtk::Button,
     pub next_btn: gtk::Button,
     pub archive_btn: gtk::Button,
@@ -22,6 +23,7 @@ pub struct ReadingPaneView {
     pub edit_draft_btn: gtk::Button,
     pub star_btn: gtk::Button,
     pub tag_btn: gtk::Button,
+    pub search_btn: gtk::Button,
     pub subject_label: gtk::Label,
     pub privacy_banner: gtk::Box,
     pub load_images_btn: gtk::Button,
@@ -39,9 +41,11 @@ impl ReadingPaneView {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         container.add_css_class("iris-reading-pane");
 
-        // Action Headerbar (Back, Prev/Next Navigation, Grouped iOS Action Pills)
+        // Action Headerbar (Flat macOS Mail Toolbar)
         let header = adw::HeaderBar::new();
         header.set_show_title(false);
+        header.set_show_start_title_buttons(false);
+        header.set_show_end_title_buttons(false);
 
         let back_btn = gtk::Button::builder()
             .icon_name("go-previous-symbolic")
@@ -49,6 +53,69 @@ impl ReadingPaneView {
             .build();
         back_btn.add_css_class("flat");
         header.pack_start(&back_btn);
+
+        let compose_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::compose_icon())
+            .tooltip_text("New Message (c)")
+            .build();
+        compose_btn.add_css_class("flat");
+        header.pack_start(&compose_btn);
+
+        let archive_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::archive_icon())
+            .tooltip_text("Archive (e)")
+            .build();
+        archive_btn.add_css_class("flat");
+        header.pack_start(&archive_btn);
+
+        let trash_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::trash_icon())
+            .tooltip_text("Delete (#)")
+            .build();
+        trash_btn.add_css_class("flat");
+        header.pack_start(&trash_btn);
+
+        let move_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::folder_icon())
+            .tooltip_text("Move to Folder... (v)")
+            .build();
+        move_btn.add_css_class("flat");
+        header.pack_start(&move_btn);
+
+        let reply_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::reply_icon())
+            .tooltip_text("Reply (r)")
+            .build();
+        reply_btn.add_css_class("flat");
+        header.pack_start(&reply_btn);
+
+        let reply_all_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::reply_all_icon())
+            .tooltip_text("Reply All (a)")
+            .build();
+        reply_all_btn.add_css_class("flat");
+        header.pack_start(&reply_all_btn);
+
+        let forward_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::forward_icon())
+            .tooltip_text("Forward (f)")
+            .build();
+        forward_btn.add_css_class("flat");
+        header.pack_start(&forward_btn);
+
+        let star_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::star_icon())
+            .tooltip_text("Star / Flag (s)")
+            .build();
+        star_btn.add_css_class("flat");
+        header.pack_start(&star_btn);
+
+        let tag_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::tag_icon())
+            .tooltip_text("Labels & Tags (l)")
+            .build();
+        tag_btn.add_css_class("flat");
+        header.pack_start(&tag_btn);
 
         // Previous / Next Message Navigation Capsule [ ∧ | ∨ ]
         let prev_btn = gtk::Button::builder()
@@ -71,54 +138,6 @@ impl ReadingPaneView {
         nav_box.append(&next_btn);
         header.pack_start(&nav_box);
 
-        let archive_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::archive_icon())
-            .tooltip_text("Archive (e)")
-            .build();
-
-        let move_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::folder_icon())
-            .tooltip_text("Move to Folder... (v)")
-            .build();
-
-        let trash_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::trash_icon())
-            .tooltip_text("Delete (#)")
-            .build();
-
-        // Triage Segmented Pill [ Archive | Move | Trash ]
-        let triage_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        triage_box.add_css_class("linked");
-        triage_box.set_margin_start(4);
-        triage_box.set_margin_end(4);
-        triage_box.append(&archive_btn);
-        triage_box.append(&move_btn);
-        triage_box.append(&trash_btn);
-
-        let forward_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::forward_icon())
-            .tooltip_text("Forward (f)")
-            .build();
-
-        let reply_all_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::reply_all_icon())
-            .tooltip_text("Reply All (a)")
-            .build();
-
-        let reply_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::reply_icon())
-            .tooltip_text("Reply (r)")
-            .build();
-
-        // Respond Segmented Pill [ Reply | Reply All | Forward ]
-        let respond_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        respond_box.add_css_class("linked");
-        respond_box.set_margin_start(4);
-        respond_box.set_margin_end(4);
-        respond_box.append(&reply_btn);
-        respond_box.append(&reply_all_btn);
-        respond_box.append(&forward_btn);
-
         let edit_draft_btn = gtk::Button::builder()
             .icon_name(crate::ui::icons::drafts_icon())
             .tooltip_text("Edit Draft")
@@ -126,29 +145,14 @@ impl ReadingPaneView {
             .build();
         edit_draft_btn.add_css_class("suggested-action");
         edit_draft_btn.set_visible(false);
+        header.pack_start(&edit_draft_btn);
 
-        let tag_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::tag_icon())
-            .tooltip_text("Labels & Tags (l)")
+        let search_btn = gtk::Button::builder()
+            .icon_name(crate::ui::icons::search_icon())
+            .tooltip_text("Search / Palette (Ctrl+K)")
             .build();
-
-        let star_btn = gtk::Button::builder()
-            .icon_name(crate::ui::icons::star_icon())
-            .tooltip_text("Star / Flag (s)")
-            .build();
-
-        // Organize Segmented Pill [ Star | Tag ]
-        let organize_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        organize_box.add_css_class("linked");
-        organize_box.set_margin_start(4);
-        organize_box.set_margin_end(4);
-        organize_box.append(&star_btn);
-        organize_box.append(&tag_btn);
-
-        header.pack_end(&organize_box);
-        header.pack_end(&respond_box);
-        header.pack_end(&triage_box);
-        header.pack_end(&edit_draft_btn);
+        search_btn.add_css_class("flat");
+        header.pack_end(&search_btn);
 
         container.append(&header);
 
@@ -211,6 +215,7 @@ impl ReadingPaneView {
         let view = Self {
             container,
             back_btn,
+            compose_btn,
             prev_btn,
             next_btn,
             archive_btn,
@@ -222,6 +227,7 @@ impl ReadingPaneView {
             edit_draft_btn,
             star_btn,
             tag_btn,
+            search_btn,
             subject_label,
             privacy_banner,
             load_images_btn,
@@ -247,7 +253,7 @@ impl ReadingPaneView {
         self.prev_btn.set_sensitive(true);
         self.next_btn.set_sensitive(true);
 
-        self.subject_label.set_visible(true);
+        self.subject_label.set_visible(false);
         self.subject_label.set_text(&thread.subject);
 
         self.star_btn.set_visible(true);
@@ -450,13 +456,21 @@ fn build_conversation_card(
     name_label.add_css_class(if is_latest { "iris-sender-heading" } else { "body" });
     top_row.append(&name_label);
 
+    let from_chip = gtk::Label::builder()
+        .label(&message.from)
+        .xalign(0.0)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .build();
+    from_chip.add_css_class("iris-sender-chip");
+    top_row.append(&from_chip);
+
     let privacy_shield = gtk::Image::from_icon_name(crate::ui::icons::shield_icon());
     privacy_shield.set_tooltip_text(Some("Mail Privacy Protection Active"));
     privacy_shield.add_css_class("iris-shield-mini");
     top_row.append(&privacy_shield);
 
     let local_dt = message.date.with_timezone(&chrono::Local);
-    let date_str = local_dt.format("%b %-d, %Y at %-I:%M %p").to_string();
+    let date_str = local_dt.format("%B %-d, %Y at %-I:%M %p").to_string();
     let date_label = gtk::Label::builder()
         .label(&date_str)
         .xalign(1.0)
@@ -468,17 +482,19 @@ fn build_conversation_card(
     top_row.append(&date_label);
     text_vbox.append(&top_row);
 
-    // Subtitle Row: "From: <email>" and a neat pill badge "To: me"
-    let sub_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    let email_label = gtk::Label::builder()
-        .label(&format!("From: {}", message.from))
-        .xalign(0.0)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .build();
-    email_label.add_css_class("caption");
-    email_label.add_css_class("dim-label");
-    sub_row.append(&email_label);
+    // Line 2: Subject (Bold, prominent)
+    if is_latest && !message.subject.is_empty() {
+        let subject_line = gtk::Label::builder()
+            .label(&message.subject)
+            .xalign(0.0)
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .build();
+        subject_line.add_css_class("iris-card-subject");
+        text_vbox.append(&subject_line);
+    }
 
+    // Line 3: Recipient: "To: ..."
+    let sub_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     let to_chip = gtk::Label::builder()
         .label(if message.to.is_empty() { "To: me".to_string() } else { format!("To: {}", message.to.join(", ")) })
         .xalign(0.0)
@@ -594,7 +610,7 @@ fn build_conversation_card(
         let body_box_clone = body_box.clone();
         let card_clone = card.clone();
         let snippet_clone = snippet_label.clone();
-        let email_clone = email_label.clone();
+        let from_clone = from_chip.clone();
         let chevron_clone = chevron_btn.clone();
         let is_exp = is_expanded.clone();
 
@@ -603,7 +619,7 @@ fn build_conversation_card(
             is_exp.set(next);
             body_box_clone.set_visible(next);
             snippet_clone.set_visible(!next);
-            email_clone.set_visible(next);
+            from_clone.set_visible(next);
 
             if next {
                 card_clone.remove_css_class("collapsed");

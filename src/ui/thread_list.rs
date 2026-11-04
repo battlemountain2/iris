@@ -145,6 +145,7 @@ impl ThreadListView {
         tabs_box.append(&tab_personal_btn);
         tabs_box.append(&tab_newsletters_btn);
         tabs_box.append(&tab_unread_btn);
+        tabs_box.set_visible(false);
 
         container.append(&tabs_box);
 
@@ -718,20 +719,16 @@ fn create_thread_card(
 
     row.add_controller(gesture);
 
-    let card_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let card_hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     card_hbox.add_css_class("iris-thread-card");
     if is_unread {
         card_hbox.add_css_class("unread");
     }
-    card_hbox.set_margin_start(10);
-    card_hbox.set_margin_end(10);
-    card_hbox.set_margin_top(8);
-    card_hbox.set_margin_bottom(8);
 
     // 1. Left indicator slot: Overlay with unread dot and selection checkmark
     let indicator_overlay = gtk::Overlay::new();
     indicator_overlay.set_valign(gtk::Align::Start);
-    indicator_overlay.set_margin_top(8);
+    indicator_overlay.set_margin_top(4);
     indicator_overlay.set_halign(gtk::Align::Center);
     indicator_overlay.add_css_class("iris-indicator-box");
 
@@ -750,20 +747,9 @@ fn create_thread_card(
 
     card_hbox.append(&indicator_overlay);
 
-    // 2. iOS Contact Avatar Monogram Circle
+    // 2. Content VBox (Dense macOS Mail Layout without noisy row avatars)
     let display_name = parse_display_name(sender);
-    let avatar = adw::Avatar::builder()
-        .size(32)
-        .text(&display_name)
-        .show_initials(true)
-        .valign(gtk::Align::Start)
-        .margin_top(2)
-        .build();
-    avatar.add_css_class("iris-row-avatar");
-    card_hbox.append(&avatar);
-
-    // 3. Content VBox
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
     vbox.set_hexpand(true);
 
     // Line 1: [Sender Name (hexpand)] [Attachment/Star icons] Right-aligned Date

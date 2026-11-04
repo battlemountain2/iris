@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 
 pub mod noctalia;
 
-const BUILTIN_THEMES: [(&str, &str); 15] = [
+const BUILTIN_THEMES: [(&str, &str); 17] = [
+    ("macos-light", include_str!("../../data/themes/macos-light.toml")),
+    ("macos-dark", include_str!("../../data/themes/macos-dark.toml")),
     ("iris-dark", include_str!("../../data/themes/iris-dark.toml")),
     ("iris-light", include_str!("../../data/themes/iris-light.toml")),
     ("attic-olive", include_str!("../../data/themes/attic-olive.toml")),
@@ -82,7 +84,7 @@ impl ThemeManager {
         }
 
         let manager = Rc::new(Self {
-            current_id: RefCell::new("iris-dark".to_string()),
+            current_id: RefCell::new("macos-light".to_string()),
             subtle_mode: RefCell::new(true),
             follows_noctalia: RefCell::new(false),
             noctalia: RefCell::new(noctalia_palette),

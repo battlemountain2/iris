@@ -179,6 +179,23 @@ Testing it right now!\r\n";
                 <blockquote>\"Fast, liquid-glass, keyboard-driven Linux email client designed for Arch Linux & Hyprland.\"</blockquote>\r\n\
                 <p>Tracking pixel beacon: <img src=\"https://github.com/images/beacon-pixel.png\" alt=\"Telemetry Beacon\" /></p>\r\n";
             fs::write(inbox_new.join("1792464003.4.mail:2,"), email4)?;
+
+            // Email 5: Twelve South (macOS Apple Mail North Star reference)
+            let email5 = "From: Twelve South <news@twelvesouth.com>\r\n\
+Reply-To: Twelve South <support@twelvesouth.com>\r\n\
+To: Joshua Ginter <josh@hey.com>\r\n\
+Subject: Did you hear? BookArc is on sale! 👓\r\n\
+Date: Thu, 27 Jul 2023 10:29:00 -0400\r\n\
+Message-ID: <twelvesouth-bookarc-2023@twelvesouth.com>\r\n\
+Content-Type: text/html; charset=utf-8\r\n\
+\r\n\
+<p align=\"center\"><a href=\"https://www.twelvesouth.com/products/bookarc-for-macbook\">Want to go full screen? View in Your Browser</a></p>\r\n\
+<h1 align=\"center\">The key to big screens on small desks.</h1>\r\n\
+<p align=\"center\" style=\"font-size: 16px;\"><b>BookArc, the space-saving vertical desktop stand - now on sale!</b></p>\r\n\
+<p>Transform your workspace into a dual-display powerhouse. BookArc lifts your MacBook vertically off your desk, clearing precious space for a full-size keyboard, mouse, and external monitor.</p>\r\n\
+<p>Crafted from seamless bead-blasted aluminum with custom silicone inserts tailored for every MacBook model.</p>\r\n\
+<p>Enjoy <b>20% off</b> this week only with code <b>BIGSCREEN</b>.</p>\r\n";
+            fs::write(inbox_new.join("1792464004.5.mail:2,"), email5)?;
         }
 
         // Seed Archive if empty
